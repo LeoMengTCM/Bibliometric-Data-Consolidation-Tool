@@ -8,11 +8,31 @@ WOS和Scopus文献数据合并去重工具
 2. Scopus记录用于补充WOS没有的信息
 3. 删除Scopus中与WOS重复的记录
 4. 保留Scopus中独有的记录
+
+作者：Meng Linghan
+开发工具：Claude Code
+日期：2025-11-04
+版本：v2.1（优化版）
+
+更新日志：
+- 添加logging模块支持
+- 改进错误处理和文件验证
+- 添加进度显示
 """
 
 import re
+import os
+import logging
 from typing import List, Dict, Set, Tuple
 from collections import defaultdict
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 
 class WOSRecordParser:
@@ -206,6 +226,23 @@ class MergeDeduplicateTool:
     """合并去重工具主类"""
 
     def __init__(self, wos_file: str, scopus_file: str, output_file: str):
+        """
+        初始化合并去重工具
+
+        Args:
+            wos_file: WOS文件路径
+            scopus_file: Scopus转换后的文件路径
+            output_file: 输出文件路径
+
+        Raises:
+            FileNotFoundError: 输入文件不存在
+        """
+        # 文件验证
+        if not os.path.exists(wos_file):
+            raise FileNotFoundError(f"WOS文件不存在: {wos_file}")
+        if not os.path.exists(scopus_file):
+            raise FileNotFoundError(f"Scopus文件不存在: {scopus_file}")
+
         self.wos_file = wos_file
         self.scopus_file = scopus_file
         self.output_file = output_file
@@ -227,54 +264,56 @@ class MergeDeduplicateTool:
             'duplicate_details': []
         }
 
+        logger.info(f"初始化合并工具 - WOS: {wos_file}, Scopus: {scopus_file}")
+
     def run(self):
         """执行合并去重流程"""
-        print("=" * 60)
-        print("WOS + Scopus 文献合并去重工具")
-        print("=" * 60)
-        print(f"WOS文件: {self.wos_file}")
-        print(f"Scopus文件: {self.scopus_file}")
-        print(f"输出文件: {self.output_file}")
-        print()
+        logger.info("=" * 60)
+        logger.info("WOS + Scopus 文献合并去重工具 v2.1")
+        logger.info("=" * 60)
+        logger.info(f"WOS文件: {self.wos_file}")
+        logger.info(f"Scopus文件: {self.scopus_file}")
+        logger.info(f"输出文件: {self.output_file}")
+        logger.info("")
 
         # 步骤1：读取文件
-        print("步骤 1/4: 读取文件...")
+        logger.info("步骤 1/4: 读取文件...")
         self.wos_records = self.parser.parse_wos_file(self.wos_file)
         self.scopus_records = self.parser.parse_wos_file(self.scopus_file)
 
         self.stats['wos_count'] = len(self.wos_records)
         self.stats['scopus_count'] = len(self.scopus_records)
 
-        print(f"  ✓ 读取WOS记录: {self.stats['wos_count']} 条")
-        print(f"  ✓ 读取Scopus记录: {self.stats['scopus_count']} 条")
-        print()
+        logger.info(f"  读取WOS记录: {self.stats['wos_count']} 条")
+        logger.info(f"  读取Scopus记录: {self.stats['scopus_count']} 条")
+        logger.info("")
 
         # 步骤2：识别Scopus中与WOS重复的记录
-        print("步骤 2/4: 识别WOS-Scopus重复记录...")
+        logger.info("步骤 2/4: 识别WOS-Scopus重复记录...")
         wos_scopus_pairs = self.find_wos_scopus_duplicates()
 
         self.stats['scopus_duplicates'] = len(wos_scopus_pairs)
         self.stats['scopus_unique'] = self.stats['scopus_count'] - self.stats['scopus_duplicates']
 
-        print(f"  ✓ 发现WOS-Scopus重复: {self.stats['scopus_duplicates']} 条")
-        print(f"  ✓ Scopus独有记录: {self.stats['scopus_unique']} 条")
-        print()
+        logger.info(f"  发现WOS-Scopus重复: {self.stats['scopus_duplicates']} 条")
+        logger.info(f"  Scopus独有记录: {self.stats['scopus_unique']} 条")
+        logger.info("")
 
         # 步骤3：合并记录（WOS优先，Scopus补充）
-        print("步骤 3/4: 合并记录（WOS优先，Scopus补充信息）...")
+        logger.info("步骤 3/4: 合并记录（WOS优先，Scopus补充信息）...")
         self.merge_records(wos_scopus_pairs)
 
         self.stats['final_count'] = len(self.final_records)
-        print(f"  ✓ 最终记录数: {self.stats['final_count']} 条")
-        print(f"    - WOS记录（合并后）: {self.stats['wos_count']} 条")
-        print(f"    - Scopus独有记录: {self.stats['scopus_unique']} 条")
-        print()
+        logger.info(f"  最终记录数: {self.stats['final_count']} 条")
+        logger.info(f"    - WOS记录（合并后）: {self.stats['wos_count']} 条")
+        logger.info(f"    - Scopus独有记录: {self.stats['scopus_unique']} 条")
+        logger.info("")
 
         # 步骤4：写入文件
-        print("步骤 4/4: 写入输出文件...")
+        logger.info("步骤 4/4: 写入输出文件...")
         self.write_output()
-        print(f"  ✓ 输出文件已保存: {self.output_file}")
-        print()
+        logger.info(f"  输出文件已保存: {self.output_file}")
+        logger.info("")
 
         # 打印统计报告
         self.print_report()
@@ -397,39 +436,39 @@ class MergeDeduplicateTool:
 
     def print_report(self):
         """打印去重报告"""
-        print("=" * 60)
-        print("合并去重报告")
-        print("=" * 60)
-        print(f"WOS原始记录数:          {self.stats['wos_count']} 条")
-        print(f"Scopus原始记录数:       {self.stats['scopus_count']} 条")
-        print(f"")
-        print(f"WOS-Scopus重复记录:     {self.stats['scopus_duplicates']} 条（已从Scopus删除）")
-        print(f"Scopus独有记录:         {self.stats['scopus_unique']} 条（已保留）")
-        print(f"")
-        print(f"最终记录数:             {self.stats['final_count']} 条")
-        print(f"  = WOS记录（含补充）:  {self.stats['wos_count']} 条")
-        print(f"  + Scopus独有:         {self.stats['scopus_unique']} 条")
-        print()
+        logger.info("=" * 60)
+        logger.info("合并去重报告")
+        logger.info("=" * 60)
+        logger.info(f"WOS原始记录数:          {self.stats['wos_count']} 条")
+        logger.info(f"Scopus原始记录数:       {self.stats['scopus_count']} 条")
+        logger.info(f"")
+        logger.info(f"WOS-Scopus重复记录:     {self.stats['scopus_duplicates']} 条（已从Scopus删除）")
+        logger.info(f"Scopus独有记录:         {self.stats['scopus_unique']} 条（已保留）")
+        logger.info(f"")
+        logger.info(f"最终记录数:             {self.stats['final_count']} 条")
+        logger.info(f"  = WOS记录（含补充）:  {self.stats['wos_count']} 条")
+        logger.info(f"  + Scopus独有:         {self.stats['scopus_unique']} 条")
+        logger.info("")
 
         if self.stats['duplicate_details']:
-            print("WOS-Scopus重复记录详情（前10条）:")
-            print("-" * 60)
+            logger.info("WOS-Scopus重复记录详情（前10条）:")
+            logger.info("-" * 60)
             for i, detail in enumerate(self.stats['duplicate_details'][:10], 1):
-                print(f"{i}. {detail['title']}...")
-                print(f"   WOS索引: {detail['wos_idx']}, Scopus索引: {detail['scopus_idx']}")
+                logger.info(f"{i}. {detail['title']}...")
+                logger.info(f"   WOS索引: {detail['wos_idx']}, Scopus索引: {detail['scopus_idx']}")
 
             if len(self.stats['duplicate_details']) > 10:
-                print(f"... 还有 {len(self.stats['duplicate_details']) - 10} 条重复记录")
+                logger.info(f"... 还有 {len(self.stats['duplicate_details']) - 10} 条重复记录")
 
-        print("=" * 60)
-        print("说明：")
-        print("- WOS记录优先保留（数据更完整）")
-        print("- Scopus信息用于补充WOS缺失字段")
-        print("- 被引次数（TC）取两者最大值")
-        print("- Scopus独有记录（无WOS对应）已全部保留")
-        print("=" * 60)
-        print("合并去重完成！")
-        print("=" * 60)
+        logger.info("=" * 60)
+        logger.info("说明：")
+        logger.info("- WOS记录优先保留（数据更完整）")
+        logger.info("- Scopus信息用于补充WOS缺失字段")
+        logger.info("- 被引次数（TC）取两者最大值")
+        logger.info("- Scopus独有记录（无WOS对应）已全部保留")
+        logger.info("=" * 60)
+        logger.info("合并去重完成！")
+        logger.info("=" * 60)
 
         # 保存详细报告
         report_file = self.output_file.replace('.txt', '_report.txt')
@@ -460,29 +499,46 @@ class MergeDeduplicateTool:
             f.write("- 被引次数（TC）取两者最大值\n")
             f.write("- Scopus独有记录（无WOS对应）已全部保留\n")
 
-        print(f"\n详细报告已保存: {report_file}")
+        logger.info(f"\n详细报告已保存: {report_file}")
 
 
 def main():
     """主函数"""
     import sys
+    import argparse
 
-    # 默认路径（当前目录）
-    wos_file = "wos.txt"
-    scopus_file = "scopus_converted_to_wos.txt"
-    output_file = "merged_deduplicated.txt"
+    # 命令行参数解析
+    parser = argparse.ArgumentParser(
+        description='WOS和Scopus文献数据合并去重工具',
+        epilog='示例: python3 merge_deduplicate.py wos.txt scopus_converted.txt merged.txt'
+    )
+    parser.add_argument('wos_file', nargs='?', default='wos.txt',
+                       help='WOS文件路径（默认: wos.txt）')
+    parser.add_argument('scopus_file', nargs='?', default='scopus_converted_to_wos.txt',
+                       help='Scopus转换后的文件路径（默认: scopus_converted_to_wos.txt）')
+    parser.add_argument('output_file', nargs='?', default='merged_deduplicated.txt',
+                       help='输出文件路径（默认: merged_deduplicated.txt）')
+    parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                       default='INFO', help='日志级别（默认: INFO）')
 
-    # 命令行参数
-    if len(sys.argv) > 1:
-        wos_file = sys.argv[1]
-    if len(sys.argv) > 2:
-        scopus_file = sys.argv[2]
-    if len(sys.argv) > 3:
-        output_file = sys.argv[3]
+    args = parser.parse_args()
 
-    # 执行合并去重
-    tool = MergeDeduplicateTool(wos_file, scopus_file, output_file)
-    tool.run()
+    # 设置日志级别
+    logging.getLogger().setLevel(getattr(logging, args.log_level))
+
+    try:
+        # 执行合并去重
+        tool = MergeDeduplicateTool(args.wos_file, args.scopus_file, args.output_file)
+        tool.run()
+        return 0
+
+    except FileNotFoundError as e:
+        logger.error(f"文件错误: {e}")
+        return 1
+    except Exception as e:
+        logger.error(f"发生未知错误: {e}")
+        logger.exception("详细错误信息:")
+        return 1
 
 
 if __name__ == '__main__':

@@ -19,6 +19,7 @@ venv/
 # scopus_converted_to_wos.txt
 # merged_deduplicated.txt
 # merged_deduplicated_report.txt
+*_analysis_report.txt
 
 # IDE
 .vscode/
@@ -31,3 +32,11 @@ venv/
 *.tmp
 *.bak
 *.log
+
+# Internal documentation (不推送到GitHub)
+推送指南.md
+转换差异说明.md
+转换质量对比报告.md
+C3字段机构提取对比报告.md
+数据准备说明.md
+使用说明.md

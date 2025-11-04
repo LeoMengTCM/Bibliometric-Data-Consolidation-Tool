@@ -7,15 +7,36 @@ Scopus CSV to WOS Plain Text Converter
 将Scopus数据库导出的CSV文件转换为Web of Science纯文本格式。
 用于文献计量学分析工具（CiteSpace, VOSviewer, Bibliometrix等）。
 
-作者：Claude Code
-日期：2025-11-03
+作者：Meng Linghan
+开发工具：Claude Code
+日期：2025-11-04
+版本：v2.1（优化版）
+
+更新日志：
+- 添加logging模块支持
+- 改进错误处理和文件验证
+- 支持外部配置文件（期刊和机构缩写）
+- 完善机构识别���辑（School/College层级判断）
+- 添加进度显示
 """
 
 import csv
 import re
+import os
+import sys
+import json
+import logging
 from datetime import datetime
-from typing import Dict, List, Optional
-import textwrap
+from typing import Dict, List, Optional, Set
+from pathlib import Path
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 
 class ScopusToWosConverter:
@@ -92,28 +113,165 @@ class ScopusToWosConverter:
         'September': 'SEP', 'October': 'OCT', 'November': 'NOV', 'December': 'DEC'
     }
 
-    def __init__(self, csv_file: str, output_file: str):
+    def __init__(self, csv_file: str, output_file: str, config_dir: str = "config"):
         """
         初始化转换器
 
         Args:
             csv_file: Scopus CSV文件路径
             output_file: 输出WOS文件路径
+            config_dir: 配置文件目录（默认为config）
+
+        Raises:
+            FileNotFoundError: 输入文件不存在
+            ValueError: 文件格式不正确
         """
+        # 文件路径验证
+        if not csv_file.endswith('.csv'):
+            raise ValueError(f"输入文件必须是CSV格式，当前文件: {csv_file}")
+
+        if not os.path.exists(csv_file):
+            raise FileNotFoundError(f"输入文件不存在: {csv_file}")
+
+        # 检查文件是否可读
+        try:
+            with open(csv_file, 'r', encoding='utf-8-sig') as f:
+                f.read(1)
+        except PermissionError:
+            raise PermissionError(f"无权限读取文件: {csv_file}")
+        except UnicodeDecodeError:
+            raise ValueError(f"文件编码错误，请确保文件为UTF-8格式: {csv_file}")
+
         self.csv_file = csv_file
         self.output_file = output_file
+        self.config_dir = config_dir
         self.records = []
 
+        # 加载配置文件
+        self.journal_abbrev = self._load_journal_abbrev()
+        self.institution_config = self._load_institution_config()
+
+        logger.info(f"初始化转换器 - 输入: {csv_file}, 输出: {output_file}")
+        logger.info(f"已加载 {len(self.journal_abbrev)} 个期刊缩写")
+
+    def _load_journal_abbrev(self) -> Dict[str, str]:
+        """加载期刊缩写配置"""
+        config_file = os.path.join(self.config_dir, "journal_abbrev.json")
+
+        # 默认缩写（备用）
+        default_abbrev = self.JOURNAL_ABBREV.copy()
+
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    custom_abbrev = json.load(f)
+                    logger.info(f"从配置文件加载了 {len(custom_abbrev)} 个期刊缩写")
+                    # 合并配置（自定义配置优先）
+                    default_abbrev.update(custom_abbrev)
+                    return default_abbrev
+            except json.JSONDecodeError as e:
+                logger.warning(f"期刊缩写配置文件格式错误: {e}，使用内置配置")
+            except Exception as e:
+                logger.warning(f"加载期刊缩写配置失败: {e}，使用内置配置")
+        else:
+            logger.info("未找到期刊缩写配置文件，使用内置配置")
+
+        return default_abbrev
+
+    def _load_institution_config(self) -> Dict:
+        """加载机构配置"""
+        config_file = os.path.join(self.config_dir, "institution_config.json")
+
+        # 默认配置
+        default_config = {
+            "independent_colleges": [],
+            "independent_schools": [],
+            "abbreviations": {
+                'Department': 'Dept',
+                'University': 'Univ',
+                'Università': 'Univ',
+                'Fondazione': 'Fdn',
+                'Institute': 'Inst',
+                'Istituto': 'Inst',
+                'Hospital': 'Hosp',
+                'Ospedale': 'Hosp',
+                'Center': 'Ctr',
+                'Centre': 'Ctr',
+                'Laboratory': 'Lab',
+                'Research': 'Res',
+                'Science': 'Sci',
+                'Sciences': 'Sci',
+                'Technology': 'Technol',
+                'Medicine': 'Med',
+                'Medical': 'Med',
+                'Clinical': 'Clin',
+                'Pharmacy': 'Pharm',
+                'degli Studi di': '',
+                'and': '&',
+            }
+        }
+
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    custom_config = json.load(f)
+                    logger.info("成功加载机构配置文件")
+                    # 合并配置
+                    if 'independent_colleges' in custom_config:
+                        default_config['independent_colleges'] = custom_config['independent_colleges']
+                    if 'independent_schools' in custom_config:
+                        default_config['independent_schools'] = custom_config['independent_schools']
+                    if 'abbreviations' in custom_config:
+                        default_config['abbreviations'].update(custom_config['abbreviations'])
+                    return default_config
+            except Exception as e:
+                logger.warning(f"加载机构配置失败: {e}，使用默认配置")
+        else:
+            logger.info("未找到机构配置文件，使用默认配置")
+
+        return default_config
+
     def read_scopus_csv(self) -> List[Dict]:
-        """读取Scopus CSV文件"""
+        """
+        读取Scopus CSV文件
+
+        Returns:
+            List[Dict]: 记录列表
+
+        Raises:
+            ValueError: CSV格式错误或缺少必要字段
+        """
         records = []
-        with open(self.csv_file, 'r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if any(row.values()):  # 跳过空行
-                    records.append(row)
-        print(f"✓ 读取了 {len(records)} 条记录")
-        return records
+        try:
+            with open(self.csv_file, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+
+                # 验证必要字段
+                required_fields = {'Authors', 'Title', 'Year'}
+                if reader.fieldnames:
+                    missing_fields = required_fields - set(reader.fieldnames)
+                    if missing_fields:
+                        logger.warning(f"CSV文件缺少推荐字段: {missing_fields}")
+
+                for row_num, row in enumerate(reader, start=2):  # 从第2行开始（第1行是表头）
+                    if any(row.values()):  # 跳过空行
+                        records.append(row)
+
+            logger.info(f"成功读取 {len(records)} 条记录")
+            return records
+
+        except FileNotFoundError:
+            logger.error(f"文件不存在: {self.csv_file}")
+            raise
+        except UnicodeDecodeError as e:
+            logger.error(f"文件编码错误: {e}")
+            raise ValueError("文件编码错误，请确保文件为UTF-8格式")
+        except csv.Error as e:
+            logger.error(f"CSV格式错误: {e}")
+            raise ValueError(f"CSV格式错误: {e}")
+        except Exception as e:
+            logger.error(f"读取文件时发生未知错误: {e}")
+            raise
 
     def format_multiline_field(self, tag: str, content: str, max_width: int = None) -> str:
         """
@@ -442,6 +600,67 @@ class ScopusToWosConverter:
 
         return converted
 
+    def _is_independent_college_or_school(self, name: str, all_parts: List[str]) -> bool:
+        """
+        判断College/School是否为独立机构
+
+        逻辑：
+        1. 如果在已知独立机构列表中 → 独立机构
+        2. 如果同一行已有University → 二级机构
+        3. 如果College/School后面有专业名称（如Medical, Pharmacy）→ 独立机构
+        4. 否则 → 二级机构（保守策略）
+
+        Args:
+            name: 当前部分的名称
+            all_parts: 整个机构信息的所有部分
+
+        Returns:
+            bool: True表示是独立机构，False表示是二级单位
+        """
+        name_lower = name.lower()
+
+        # 1. 检查是否在白名单中
+        for independent in self.institution_config.get('independent_colleges', []):
+            if independent.lower() in name_lower:
+                return True
+
+        for independent in self.institution_config.get('independent_schools', []):
+            if independent.lower() in name_lower:
+                return True
+
+        # 2. 检查是否已有University（上下文判断）
+        has_university = any('university' in p.lower() or 'università' in p.lower() or 'universit' in p.lower()
+                            for p in all_parts if p != name)
+        if has_university:
+            return False  # 有University则College/School是二级机构
+
+        # 3. 检查是否是专业学院（Medical, Pharmacy等）
+        professional_indicators = [
+            'medical', 'medicine', 'pharmacy', 'law', 'business',
+            'engineering', 'public health', 'hygiene', 'economics',
+            'tropical', 'veterinary', 'dental', 'nursing'
+        ]
+
+        if 'school' in name_lower:
+            for indicator in professional_indicators:
+                if indicator in name_lower:
+                    return True  # School of Medicine这种通常是独立机构
+
+        # 4. College of XX（学院名称）通常是二级机构，除非特别知名
+        if 'college of' in name_lower:
+            # "College of Pharmacy"可能是二级，但"Imperial College"是一级
+            return False
+
+        # 5. 如果College不带"of"且是完整名称，可能是独立学院
+        if 'college' in name_lower and 'of' not in name_lower:
+            # "Boston College", "King's College"这种
+            words = name.split()
+            if len(words) >= 2:  # 至少两个词
+                return True
+
+        # 默认：保守策略，当作二级机构
+        return False
+
     def reorder_institution_parts(self, institution: str) -> str:
         """
         重新排序机构信息：一级机构在前，二级单位在后
@@ -452,8 +671,9 @@ class ScopusToWosConverter:
         逻辑：
         1. 识别一级机构（University, Hospital, Institute, Foundation等）
         2. 识别二级单位（Department, Division, Unit, Laboratory等）
-        3. 识别地理信息（城市、国家）
-        4. 重新排序：一级机构 → 二级单位 → 地理信息
+        3. 智能判断School/College的层级
+        4. 识别地理信息（城市、国家）
+        5. 重新排序：一级机构 → 二级单位 → 地理信息
         """
         # 按逗号分割各部分
         parts = [p.strip() for p in institution.split(',')]
@@ -461,25 +681,24 @@ class ScopusToWosConverter:
         if len(parts) < 2:
             return institution
 
-        # 一级机构关键词
+        # 一级机构关键词（明确的）
         primary_keywords = [
-            'University', 'Università', 'Universit', 'Univ',
+            'University', 'Università', 'Universität', 'Universit', 'Univ',
             'Hospital', 'Ospedale', 'Hosp',
-            'Institute', 'Istituto', 'Inst',
+            'Institute', 'Istituto', 'Institut',
             'Foundation', 'Fondazione', 'Fdn',
-            'College', 'School',
             'IRCCS', 'Policlinico', 'Clinic',
-            'Center', 'Centre', 'Centro'
+            'Center', 'Centre', 'Centro', 'Academy', 'Accademia'
         ]
 
-        # 二级单位关键词
+        # 二级单位关键词（明确的）
         secondary_keywords = [
-            'Department', 'Dipartimento', 'Dept',
-            'Division', 'Divisione', 'Div',
-            'Unit', 'Unità',
-            'Laboratory', 'Laboratorio', 'Lab',
+            'Department of', 'Dipartimento di', 'Dept of', 'Dept.',
+            'Division of', 'Divisione di', 'Div of',
+            'Unit of', 'Unità di',
+            'Laboratory of', 'Laboratorio di',
             'Service', 'Servizio',
-            'Section', 'Sezione'
+            'Section of', 'Sezione di'
         ]
 
         # 分类各部分
@@ -488,16 +707,17 @@ class ScopusToWosConverter:
         geo_parts = []
 
         # 假设最后1-2个部分是地理信息（城市、国家）
-        # 一般格式：..., City, Country 或 ..., City
         if len(parts) >= 2:
-            # 最后一个通常是国家
             last_part = parts[-1]
-            # 倒数第二个通常是城市
             second_last = parts[-2] if len(parts) >= 2 else None
 
-            # 检查是否是常见国家名或城市名（简单启发式：单个词且不含机构关键词）
+            # 检查是否是地理信息
             is_last_geo = not any(kw.lower() in last_part.lower() for kw in primary_keywords + secondary_keywords)
-            is_second_last_geo = second_last and not any(kw.lower() in second_last.lower() for kw in primary_keywords + secondary_keywords)
+            is_last_geo = is_last_geo and 'college' not in last_part.lower() and 'school' not in last_part.lower()
+
+            is_second_last_geo = (second_last and
+                                 not any(kw.lower() in second_last.lower() for kw in primary_keywords + secondary_keywords) and
+                                 'college' not in second_last.lower() and 'school' not in second_last.lower())
 
             if is_last_geo:
                 geo_parts.append(last_part)
@@ -511,17 +731,29 @@ class ScopusToWosConverter:
         for part in parts:
             part_lower = part.lower()
 
+            # 检查是否包含明确的二级单位关键词
+            is_secondary = any(kw.lower() in part_lower for kw in secondary_keywords)
+            if is_secondary:
+                secondary_parts.append(part)
+                continue
+
             # 检查是否包含一级机构关键词
             is_primary = any(kw.lower() in part_lower for kw in primary_keywords)
-            # 检查是否包含二级单位关键词
-            is_secondary = any(kw.lower() in part_lower for kw in secondary_keywords)
 
-            if is_primary and not is_secondary:
+            # 特殊处理：School和College需要智能判断
+            has_school = 'school' in part_lower
+            has_college = 'college' in part_lower
+
+            if has_school or has_college:
+                # 使用智能判断
+                if self._is_independent_college_or_school(part, parts):
+                    primary_parts.append(part)
+                else:
+                    secondary_parts.append(part)
+            elif is_primary:
                 primary_parts.append(part)
-            elif is_secondary:
-                secondary_parts.append(part)
             else:
-                # 如果不确定，放入一级机构（保守策略）
+                # 不确定的情况，放入一级机构（保守策略）
                 primary_parts.append(part)
 
         # 重新组合：一级机构 + 二级单位 + 地理信息
@@ -536,47 +768,17 @@ class ScopusToWosConverter:
         例如：
         "Department of Internal Medicine" -> "Dept Internal Med"
         "Fondazione IRCCS Policlinico San Matteo" -> "Fdn IRCCS Policlin San Matteo"
+        "School of Medicine" -> "Sch Med"
         """
-        # 常见缩写规则
-        abbrev_map = {
-            'Department': 'Dept',
-            'University': 'Univ',
-            'Università': 'Univ',
-            'Fondazione': 'Fdn',
-            'Institute': 'Inst',
-            'Istituto': 'Inst',
-            'Hospital': 'Hosp',
-            'Ospedale': 'Hosp',
-            'Center': 'Ctr',
-            'Centre': 'Ctr',
-            'Laboratory': 'Lab',
-            'Research': 'Res',
-            'Science': 'Sci',
-            'Sciences': 'Sci',
-            'Technology': 'Technol',
-            'Medicine': 'Med',
-            'Medical': 'Med',
-            'Clinical': 'Clin',
-            'Clinici': 'Clin',
-            'Scientifici': 'Sci',
-            'National': 'Natl',
-            'International': 'Int',
-            'Advanced': 'Adv',
-            'Pathology': 'Pathol',
-            'Biology': 'Biol',
-            'Chemistry': 'Chem',
-            'Physics': 'Phys',
-            'Engineering': 'Engn',
-            'degli Studi di': '',  # 意大利语"大学"
-            'and': '&',
-        }
+        # 使用配置文件中的缩写规则
+        abbrev_map = self.institution_config['abbreviations']
 
         result = institution
         for full, abbrev in abbrev_map.items():
             result = re.sub(r'\b' + re.escape(full) + r'\b', abbrev, result, flags=re.IGNORECASE)
 
         # 移除常见介词和冠词（WOS风格）
-        prepositions = ['of', 'for', 'the', 'and', 'in', 'at', 'on']
+        prepositions = ['of', 'for', 'the', 'in', 'at', 'on']
         for prep in prepositions:
             # 只移除单独的介词（前后有空格的），不移除单词中间的部分
             result = re.sub(r'\s+' + re.escape(prep) + r'\s+', ' ', result, flags=re.IGNORECASE)
@@ -601,19 +803,19 @@ class ScopusToWosConverter:
 
         策略：
         1. 识别一级机构关键词（University, Hospital, Institute, College等）
-        2. 提取包含这些关键词的机构名称
-        3. 去除部门名称（Department, Division, School of XX等）
-        4. 去重并标准化
+        2. 智能判断College/School是否为一级机构
+        3. 提取包含这些关键词的机构名称
+        4. 去除部门名称（Department, Division等）
+        5. 去重并标准化
         """
         if not affil_str:
             return []
 
-        # 一级机构的关键词（这些通常是顶层机构）
+        # 一级机构的关键词（明确的）
         primary_keywords = [
             'University', 'Università', 'Universität', 'Universi',  # 大学
             'Hospital', 'Ospedale', 'Clinic', 'Medical Center',     # 医院
             'Institute', 'Istituto', 'Institut',                    # 研究所
-            'College', 'School of Medicine', 'School of Public',    # 学院
             'Academy', 'Accademia',                                 # 科学院
             'Foundation', 'Fondazione', 'IRCCS',                    # 基金会/研究机构
             'Laboratory', 'Laboratorio',                            # 实验室（顶层）
@@ -665,12 +867,21 @@ class ScopusToWosConverter:
                 if is_secondary:
                     continue  # 跳过部门
 
+                part_lower = part.lower()
+
                 # 检查是否包含一级机构关键词
-                is_primary = False
-                for prim_keyword in primary_keywords:
-                    if prim_keyword.lower() in part.lower():
+                is_primary = any(kw.lower() in part_lower for kw in primary_keywords)
+
+                # 特殊处理：College和School需要智能判断
+                has_college = 'college' in part_lower
+                has_school = 'school' in part_lower
+
+                if has_college or has_school:
+                    # 使用智能判断方法
+                    if self._is_independent_college_or_school(part, institution_parts):
                         is_primary = True
-                        break
+                    else:
+                        is_primary = False  # 是二级单位，跳过
 
                 if is_primary:
                     # 清理机构名称
@@ -920,12 +1131,22 @@ class ScopusToWosConverter:
         return '\n'.join(wos_lines)
 
     def convert(self):
-        """执行转换"""
-        print("开始转换 Scopus CSV → WOS 纯文本格式...")
-        print("-" * 60)
+        """
+        执行转换
+
+        Raises:
+            IOError: 写入文件失败
+        """
+        logger.info("="*60)
+        logger.info("开始转换 Scopus CSV → WOS 纯文本格式")
+        logger.info("="*60)
 
         # 读取Scopus CSV
         self.records = self.read_scopus_csv()
+
+        if not self.records:
+            logger.warning("没有找到任何记录，终止转换")
+            return
 
         # 转换每条记录
         wos_content = []
@@ -934,58 +1155,106 @@ class ScopusToWosConverter:
         wos_content.append("FN Scopus Export (Converted to WOS Format)")
         wos_content.append("VR 1.0")
 
+        total = len(self.records)
+        logger.info(f"开始转换 {total} 条记录...")
+
         # 转换每条记录
         for i, record in enumerate(self.records, 1):
-            print(f"转换记录 {i}/{len(self.records)}: {record.get('Title', 'N/A')[:50]}...")
-            wos_record = self.convert_record(record)
-            # 在记录前添加空行（除了第一条记录）
-            if i > 1:
-                wos_content.append("")  # 空行
-            wos_content.append(wos_record)
+            title = record.get('Title', 'N/A')
+            title_short = title[:50] + "..." if len(title) > 50 else title
+
+            # 进度显示（每10%或每100条显示一次）
+            if i % max(1, total // 10) == 0 or i % 100 == 0 or i == total:
+                progress = (i / total) * 100
+                logger.info(f"进度: {progress:.1f}% ({i}/{total}) - {title_short}")
+
+            try:
+                wos_record = self.convert_record(record)
+                # 在记录前添加空行（除了第一条记录）
+                if i > 1:
+                    wos_content.append("")  # 空行
+                wos_content.append(wos_record)
+            except Exception as e:
+                logger.error(f"转换第 {i} 条记录时出错: {e}")
+                logger.error(f"问题记录: {title_short}")
+                # 继续处理下一条
 
         # WOS文件尾（前面加空行）
         wos_content.append("")  # 空行
         wos_content.append("EF")
 
         # 写入文件（用单个换行符连接，包含UTF-8 BOM，与WOS格式完全一致）
-        with open(self.output_file, 'w', encoding='utf-8-sig') as f:
-            f.write('\n'.join(wos_content))
-
-        print("-" * 60)
-        print(f"✓ 转换完成！")
-        print(f"✓ 输出文件: {self.output_file}")
-        print(f"✓ 共转换 {len(self.records)} 条记录")
+        try:
+            with open(self.output_file, 'w', encoding='utf-8-sig') as f:
+                f.write('\n'.join(wos_content))
+            logger.info("="*60)
+            logger.info(f"转换完成！")
+            logger.info(f"输出文件: {self.output_file}")
+            logger.info(f"共转换 {len(self.records)} 条记录")
+            logger.info("="*60)
+        except IOError as e:
+            logger.error(f"写入文件失败: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"写入文件时发生未知错误: {e}")
+            raise
 
 
 def main():
     """主函数"""
     import sys
+    import argparse
 
-    # 默认路径（当前目录）
-    input_file = "scopus.csv"
-    output_file = "scopus_converted_to_wos.txt"
+    # 命令行参数解析
+    parser = argparse.ArgumentParser(
+        description='Scopus CSV to WOS Plain Text Converter',
+        epilog='示例: python3 scopus_to_wos_converter.py scopus.csv output.txt'
+    )
+    parser.add_argument('input_file', nargs='?', default='scopus.csv',
+                       help='Scopus CSV文件路径（默认: scopus.csv）')
+    parser.add_argument('output_file', nargs='?', default='scopus_converted_to_wos.txt',
+                       help='输出WOS文件路径（默认: scopus_converted_to_wos.txt）')
+    parser.add_argument('--config-dir', default='config',
+                       help='配置文件目录（默认: config）')
+    parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                       default='INFO', help='日志级别（默认: INFO）')
 
-    # 命令行参数
-    if len(sys.argv) > 1:
-        input_file = sys.argv[1]
-    if len(sys.argv) > 2:
-        output_file = sys.argv[2]
+    args = parser.parse_args()
 
-    print("=" * 60)
-    print("Scopus to WOS Converter")
-    print("=" * 60)
-    print(f"输入文件: {input_file}")
-    print(f"输出文件: {output_file}")
-    print()
+    # 设置日志级别
+    logging.getLogger().setLevel(getattr(logging, args.log_level))
 
-    # 执行转换
-    converter = ScopusToWosConverter(input_file, output_file)
-    converter.convert()
+    logger.info("=" * 60)
+    logger.info("Scopus to WOS Converter v2.1")
+    logger.info("=" * 60)
+    logger.info(f"输入文件: {args.input_file}")
+    logger.info(f"输出文件: {args.output_file}")
+    logger.info(f"配置目录: {args.config_dir}")
 
-    print()
-    print("=" * 60)
-    print("转换完成！现在可以将输出文件导入文献计量学分析工具。")
-    print("=" * 60)
+    try:
+        # 执行转换
+        converter = ScopusToWosConverter(
+            args.input_file,
+            args.output_file,
+            args.config_dir
+        )
+        converter.convert()
+
+        logger.info("")
+        logger.info("转换完成！现在可以将输出文件导入文献计量学分析工具。")
+        logger.info("=" * 60)
+        return 0
+
+    except FileNotFoundError as e:
+        logger.error(f"文件错误: {e}")
+        return 1
+    except ValueError as e:
+        logger.error(f"数据错误: {e}")
+        return 1
+    except Exception as e:
+        logger.error(f"发生未知错误: {e}")
+        logger.exception("详细错误信息:")
+        return 1
 
 
 if __name__ == "__main__":

@@ -1,0 +1,73 @@
+{
+  "country_mapping": {
+    "Peoples R China": "China",
+    "P R China": "China",
+    "PR China": "China",
+    "PRC": "China",
+    "Peoples Republic of China": "China",
+    "Hong Kong": "China",
+    "Macau": "China",
+    "Taiwan": "China",
+
+    "USA": "United States",
+    "U S A": "United States",
+    "U.S.A.": "United States",
+    "United States of America": "United States",
+
+    "UK": "United Kingdom",
+    "Great Britain": "United Kingdom",
+    "England": "United Kingdom",
+    "Scotland": "United Kingdom",
+    "Wales": "United Kingdom",
+
+    "South Korea": "South Korea",
+    "Republic of Korea": "South Korea",
+    "Korea": "South Korea",
+
+    "Iran": "Iran",
+    "Islamic Republic of Iran": "Iran",
+
+    "Deutschland": "Germany",
+    "Bundesrepublik Deutschland": "Germany",
+
+    "U Arab Emirates": "United Arab Emirates",
+    "Russian Federation": "Russia",
+    "Viet Nam": "Vietnam",
+    "Czech Republic": "Czechia",
+    "Czechoslovakia": "Czechia",
+
+    "TX USA": "United States",
+    "MA USA": "United States",
+    "OH USA": "United States",
+    "CA USA": "United States",
+    "NY USA": "United States",
+    "PA USA": "United States",
+    "FL USA": "United States",
+    "IL USA": "United States",
+    "NC USA": "United States",
+    "GA USA": "United States",
+    "VA USA": "United States",
+    "MD USA": "United States",
+    "MI USA": "United States",
+    "WA USA": "United States",
+    "AZ USA": "United States",
+    "CO USA": "United States",
+    "OR USA": "United States"
+  },
+
+  "us_states": {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+    "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho",
+    "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+    "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
+    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+    "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+    "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+    "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming", "DC": "District of Columbia"
+  }
+}
