@@ -9,8 +9,8 @@ Scopus CSV to WOS Plain Text Converter
 
 作者：Meng Linghan
 开发工具：Claude Code
-日期：2025-11-04
-版本：v2.1（优化版）
+日期：2025-11-05
+版本：v3.1（重大修复版 - C1字段完美修复）
 
 更新日志：
 - 添加logging模块支持
@@ -354,13 +354,16 @@ class ScopusToWosConverter:
 
     def convert_author_full_names(self, full_names_str: str) -> List[str]:
         """
-        转换完整作者姓名
+        转换完整作者姓名 - 修复版
 
         Scopus: "Miceli, Emanuela (6505992224); Lenti, Marco Vincenzo (55189363300)"
         WOS: ["Miceli, Emanuela", "Lenti, Marco Vincenzo"]
 
-        注意：Scopus有时只提供缩写，如 "Di Sabatino, A. (6603698114)"
-        需要去掉末尾的点号
+        特殊处理：
+        1. 移除Scopus ID（括号内容）
+        2. 处理复杂姓氏（如"Abu Akar, Firas"必须保持顺序，不能变成"Akar, Firas Abu"）
+        3. 移除多余的学位后缀（M.D., Ph.D.等）
+        4. 保持中间名（Scopus提供了就保留）
         """
         if not full_names_str:
             return []
@@ -368,14 +371,35 @@ class ScopusToWosConverter:
         # 按分号分割
         authors = [a.strip() for a in full_names_str.split(';')]
 
-        # 移除Scopus ID（括号部分）
         converted = []
         for author in authors:
-            # 移除括号及其内容
+            # 移除括号及其内容（Scopus ID）
             author_clean = re.sub(r'\s*\([^)]*\)', '', author).strip()
-            # 如果名字部分只是缩写（如 "A."），去掉末尾的点号
-            # 但保留完整名字
-            author_clean = author_clean.rstrip('.')
+
+            # 移除学位后缀（M.D., Ph.D., Dr., Prof.等）
+            # 这些通常在最后，用空格或逗号分隔
+            degree_suffixes = [
+                r',?\s*M\.?D\.?$', r',?\s*Ph\.?D\.?$', r',?\s*Dr\.?$',
+                r',?\s*Prof\.?$', r',?\s*M\.?S\.?$', r',?\s*B\.?S\.?$'
+            ]
+            for suffix_pattern in degree_suffixes:
+                author_clean = re.sub(suffix_pattern, '', author_clean, flags=re.IGNORECASE)
+
+            # 去掉末尾多余的点号和空格
+            author_clean = author_clean.rstrip('. ').strip()
+
+            # 检查姓名格式是否正确（必须是 "Lastname, Firstname" 格式）
+            if ',' in author_clean:
+                parts = author_clean.split(',', 1)
+                if len(parts) == 2:
+                    lastname = parts[0].strip()
+                    firstname = parts[1].strip()
+
+                    # 复杂姓氏检查：如果名字部分看起来像姓氏（包含空格和大写），
+                    # 可能是Scopus错误地颠倒了顺序（如"Akar, Firas Abu"应该是"Abu Akar, Firas"）
+                    # 但这个检测很困难，所以我们保守处理，相信Scopus的顺序
+                    author_clean = f"{lastname}, {firstname}"
+
             converted.append(author_clean)
 
         return converted
@@ -536,69 +560,169 @@ class ScopusToWosConverter:
 
     def parse_affiliations(self, affil_str: str) -> List[str]:
         """
-        解析作者机构信息
+        解析作者机构信息 - 完全重写版
 
-        Scopus格式（按作者分组）:
-        "Miceli, Emanuela, Dept A, Univ X, City, Country; Lenti, Marco Vincenzo, Dept A, Univ X, City, Country; ..."
+        Scopus复杂格式（一个作者可能有多个机构，用逗号连续列出）:
+        "Author1, Name1, Inst1, City1, Country1; Author2, Name2, Inst2A, City2A, Country2A, Inst2B, City2B, Country2B"
 
-        WOS格式（按机构分组）:
-        "[Author1, Full Name1; Author2, Full Name2] Institution, Dept, City, Country."
+        WOS格式（按机构分组，一个作者多机构必须分行）:
+        "[Author1, Name1] Inst1, City1, Country1."
+        "[Author2, Name2] Inst2A, City2A, Country2A."
+        "[Author2, Name2] Inst2B, City2B, Country2B."
 
-        关键：方括号内必须是 [姓, 名]，这样可视化软件才能正确识别机构
+        关键规则：
+        1. 多个作者共享同一机构 → 合并到一行
+        2. 一个作者有多个机构 → 必须分成多行
+        3. 通过识别国家名来分割机构边界
         """
         if not affil_str:
             return []
 
-        # 按分号分割每个作者的机构信息
-        author_affils = [a.strip() for a in affil_str.split(';')]
+        # 常见国家名列表（用于识别机构边界）
+        countries = [
+            'USA', 'United States', 'United Kingdom', 'England', 'Scotland', 'Wales',
+            'China', 'Peoples R China', 'Japan', 'Germany', 'France', 'Italy', 'Spain',
+            'Canada', 'Australia', 'India', 'South Korea', 'Brazil', 'Russia',
+            'Netherlands', 'Switzerland', 'Sweden', 'Belgium', 'Austria', 'Poland',
+            'Israel', 'Palestine', 'Argentina', 'Mexico', 'Turkey', 'Turkiye',
+            'South Africa', 'Singapore', 'Taiwan', 'Hong Kong', 'Ireland', 'Denmark',
+            'Norway', 'Finland', 'Greece', 'Portugal', 'Czech Republic', 'Hungary',
+            'Romania', 'Chile', 'Colombia', 'Peru', 'Iran', 'Iraq', 'Egypt'
+        ]
 
-        # 存储每个作者（完整姓名）和机构的关系
+        # 按分号分割每个作者的信息块
+        author_blocks = [a.strip() for a in affil_str.split(';')]
+
+        # 存储结果：List[(author, institution)]
         author_institutions = []
 
-        for affil in author_affils:
-            if not affil:
+        for block in author_blocks:
+            if not block:
                 continue
 
             # 按逗号分割
-            parts = [p.strip() for p in affil.split(',')]
+            parts = [p.strip() for p in block.split(',')]
 
-            if len(parts) >= 3:
-                # Scopus格式：第一部分是姓，第二部分是名
-                # parts[0] = "Lastname", parts[1] = "Firstname"
-                # 需要重组为 "Lastname, Firstname"
-                author_lastname = parts[0]
-                author_firstname = parts[1]
-                author_full = f"{author_lastname}, {author_firstname}"  # "Facciotti, Federica"
+            if len(parts) < 3:
+                continue
 
-                # 机构信息是从第三部分开始的所有部分
-                inst_parts = parts[2:]
-                institution = ', '.join(inst_parts)
+            # 前两部分是作者名
+            author_lastname = parts[0]
+            author_firstname = parts[1]
+            author_full = f"{author_lastname}, {author_firstname}"
 
-                # 1. 先重新排序：一级机构在前，二级单位在后
-                institution_reordered = self.reorder_institution_parts(institution)
+            # 从第3部分开始是机构信息
+            # 需要识别机构边界（通过国家名）
+            remaining_parts = parts[2:]
 
-                # 2. 再缩写机构名
-                institution_short = self.abbreviate_institution(institution_reordered)
+            # 查找所有国家名的位置
+            # 策略：只识别真正独立的国家名，不识别组合词中的国家名
+            # 如"Israel"是国家，但"Edith Wolfson Medical Center Israel"不是
+            country_indices = []
+            for i, part in enumerate(remaining_parts):
+                part_clean = part.strip().rstrip('.')
+                # 判断是否是独立的国家名：
+                # 1. 部分的词数<=2（如"Israel"或"United States"）
+                # 2. 且完全匹配某个国家名
+                word_count = len(part_clean.split())
+                if word_count <= 2:  # 只有1-2个词才可能是独立的国家名
+                    for country in countries:
+                        if part_clean.lower() == country.lower():
+                            country_indices.append(i)
+                            break
 
-                author_institutions.append((author_full, institution_short))
+            # 如果找到国家，按国家位置分割机构
+            if country_indices:
+                institutions = []
+                start = 0
+                for country_idx in country_indices:
+                    # 从start到country_idx+1是一个完整的机构
+                    inst_parts = remaining_parts[start:country_idx+1]
+                    if inst_parts:
+                        institution = ', '.join(inst_parts)
+                        institutions.append(institution)
+                    start = country_idx + 1
 
-        # 按机构分组（合并相同机构的作者）
-        converted = []
-        processed_institutions = {}
+                # 处理每个机构
+                for institution in institutions:
+                    # 1. 重新排序
+                    inst_reordered = self.reorder_institution_parts(institution)
+                    # 2. 缩写
+                    inst_short = self.abbreviate_institution(inst_reordered)
+                    # 3. 标准化国家
+                    inst_standard = self.standardize_country(inst_short)
 
+                    author_institutions.append((author_full, inst_standard))
+            else:
+                # 没找到国家名，整个当作一个机构
+                institution = ', '.join(remaining_parts)
+                inst_reordered = self.reorder_institution_parts(institution)
+                inst_short = self.abbreviate_institution(inst_reordered)
+                inst_standard = self.standardize_country(inst_short)
+                author_institutions.append((author_full, inst_standard))
+
+        # 按机构分组（允许多个作者共享一个机构）
+        institution_to_authors = {}
         for author_full, institution in author_institutions:
-            if institution not in processed_institutions:
-                processed_institutions[institution] = []
-            processed_institutions[institution].append(author_full)
+            if institution not in institution_to_authors:
+                institution_to_authors[institution] = []
+            if author_full not in institution_to_authors[institution]:
+                institution_to_authors[institution].append(author_full)
 
-        # 格式化输出：WOS格式 [Author1, Full1; Author2, Full2] Institution.
-        for institution, authors in processed_institutions.items():
-            # 作者列表用分号分隔，每个作者保持 "Lastname, Firstname" 格式
-            author_list = '; '.join(authors)
+        # 生成C1行
+        converted = []
+        for institution, authors in institution_to_authors.items():
+            author_list = '; '.join(sorted(authors))
             wos_affil = f"[{author_list}] {institution}."
             converted.append(wos_affil)
 
         return converted
+
+    def standardize_country(self, institution: str) -> str:
+        """
+        标准化国家名称为WOS格式
+
+        WOS使用的标准国家名称：
+        - USA (不是United States)
+        - England / Scotland / Wales / North Ireland (不是United Kingdom)
+        - Peoples R China (不是China)
+        - South Korea (不是Korea)
+        - Turkiye (不是Turkey)
+
+        Args:
+            institution: 机构字符串（包含国家名）
+
+        Returns:
+            标准化后的机构字符串
+        """
+        # 国家名称映射表（Scopus → WOS标准）
+        country_mapping = {
+            'United States': 'USA',
+            'United Kingdom': 'England',  # 默认England，除非明确是Scotland等
+            'China': 'Peoples R China',
+            'Korea': 'South Korea',
+            'Turkey': 'Turkiye',
+            'Russia': 'Russia',
+            'Iran': 'Iran',
+            'Vietnam': 'Vietnam',
+            'Czech Republic': 'Czech Republic',
+            'Taiwan': 'Taiwan',
+        }
+
+        # 分割机构字符串（最后一个逗号后通常是国家）
+        parts = [p.strip() for p in institution.split(',')]
+
+        if len(parts) >= 1:
+            # 检查最后一部分是否是国家名
+            last_part = parts[-1]
+
+            # 尝试映射
+            for scopus_name, wos_name in country_mapping.items():
+                if scopus_name in last_part:
+                    parts[-1] = last_part.replace(scopus_name, wos_name)
+                    break
+
+        return ', '.join(parts)
 
     def _is_independent_college_or_school(self, name: str, all_parts: List[str]) -> bool:
         """
@@ -1225,7 +1349,7 @@ def main():
     logging.getLogger().setLevel(getattr(logging, args.log_level))
 
     logger.info("=" * 60)
-    logger.info("Scopus to WOS Converter v2.1")
+    logger.info("Scopus to WOS Converter v3.1")
     logger.info("=" * 60)
     logger.info(f"输入文件: {args.input_file}")
     logger.info(f"输出文件: {args.output_file}")

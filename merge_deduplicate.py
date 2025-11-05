@@ -261,7 +261,8 @@ class MergeDeduplicateTool:
             'scopus_duplicates': 0,
             'scopus_unique': 0,
             'final_count': 0,
-            'duplicate_details': []
+            'duplicate_details': [],
+            'yearly_stats': {}  # {year: {'documents': count, 'citations': total}}
         }
 
         logger.info(f"初始化合并工具 - WOS: {wos_file}, Scopus: {scopus_file}")
@@ -313,6 +314,11 @@ class MergeDeduplicateTool:
         logger.info("步骤 4/4: 写入输出文件...")
         self.write_output()
         logger.info(f"  输出文件已保存: {self.output_file}")
+        logger.info("")
+
+        # 步骤5：生成年度统计
+        logger.info("生成年度统计...")
+        self.calculate_yearly_stats()
         logger.info("")
 
         # 打印统计报告
@@ -434,6 +440,39 @@ class MergeDeduplicateTool:
         with open(self.output_file, 'w', encoding='utf-8-sig') as f:
             f.write('\n'.join(lines))
 
+    def calculate_yearly_stats(self):
+        """
+        计算每年的发文量和引文量
+
+        统计维度：
+        - Year: 年份
+        - Documents: 文档数量
+        - Citations: 引文总数
+        """
+        yearly_data = defaultdict(lambda: {'documents': 0, 'citations': 0})
+
+        for record in self.final_records:
+            # 获取年份
+            year = record.get('PY', '').strip()
+            if not year:
+                year = 'Unknown'
+
+            # 获取引文数
+            citations = record.get('TC', '0').strip()
+            try:
+                citations = int(citations) if citations else 0
+            except ValueError:
+                citations = 0
+
+            # 累加统计
+            yearly_data[year]['documents'] += 1
+            yearly_data[year]['citations'] += citations
+
+        # 排序（按年份）
+        self.stats['yearly_stats'] = dict(sorted(yearly_data.items()))
+
+        logger.info(f"  年度统计完成，覆盖 {len(self.stats['yearly_stats'])} 个年份")
+
     def print_report(self):
         """打印去重报告"""
         logger.info("=" * 60)
@@ -460,6 +499,30 @@ class MergeDeduplicateTool:
             if len(self.stats['duplicate_details']) > 10:
                 logger.info(f"... 还有 {len(self.stats['duplicate_details']) - 10} 条重复记录")
 
+        # 年度统计表格
+        if self.stats['yearly_stats']:
+            logger.info("")
+            logger.info("=" * 60)
+            logger.info("年度发文量及引文量统计")
+            logger.info("=" * 60)
+            logger.info(f"{'Year':<10} {'Documents':<15} {'Citations':<15}")
+            logger.info("-" * 60)
+
+            total_docs = 0
+            total_cites = 0
+
+            for year in sorted(self.stats['yearly_stats'].keys()):
+                data = self.stats['yearly_stats'][year]
+                docs = data['documents']
+                cites = data['citations']
+                total_docs += docs
+                total_cites += cites
+                logger.info(f"{year:<10} {docs:<15} {cites:<15}")
+
+            logger.info("-" * 60)
+            logger.info(f"{'Total':<10} {total_docs:<15} {total_cites:<15}")
+
+        logger.info("")
         logger.info("=" * 60)
         logger.info("说明：")
         logger.info("- WOS记录优先保留（数据更完整）")
@@ -491,6 +554,28 @@ class MergeDeduplicateTool:
                 for i, detail in enumerate(self.stats['duplicate_details'], 1):
                     f.write(f"{i}. {detail['title']}...\n")
                     f.write(f"   WOS索引: {detail['wos_idx']}, Scopus索引: {detail['scopus_idx']}\n")
+
+            # 年度统计表格
+            if self.stats['yearly_stats']:
+                f.write("\n" + "=" * 60 + "\n")
+                f.write("年度发文量及引文量统计\n")
+                f.write("=" * 60 + "\n")
+                f.write(f"{'Year':<10} {'Documents':<15} {'Citations':<15}\n")
+                f.write("-" * 60 + "\n")
+
+                total_docs = 0
+                total_cites = 0
+
+                for year in sorted(self.stats['yearly_stats'].keys()):
+                    data = self.stats['yearly_stats'][year]
+                    docs = data['documents']
+                    cites = data['citations']
+                    total_docs += docs
+                    total_cites += cites
+                    f.write(f"{year:<10} {docs:<15} {cites:<15}\n")
+
+                f.write("-" * 60 + "\n")
+                f.write(f"{'Total':<10} {total_docs:<15} {total_cites:<15}\n")
 
             f.write("\n" + "=" * 60 + "\n")
             f.write("合并策略说明:\n")

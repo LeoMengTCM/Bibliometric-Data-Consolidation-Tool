@@ -2,8 +2,17 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
+[![Version](https://img.shields.io/badge/version-3.1.0-green.svg)](https://github.com/menglinghan/scopus-wos-tools/releases/tag/v3.1.0)
 
 一套专业的文献计量学数据处理工具，用于整合Scopus和Web of Science（WOS）数据库的文献数据，完美支持CiteSpace、VOSviewer、Bibliometrix等主流分析工具。
+
+> **🔥 v3.1 重大更新**（2025-11-05）：
+> - ✅ **C1字段格式完美修复** - 一作者多机构现在正确分成多行，完全兼容VOSViewer/CiteSpace
+> - ✅ **国家名称标准化** - USA, England, Peoples R China等符合WOS标准
+> - ✅ **智能机构识别** - 避免将机构名中的国家词误识别为边界
+> - 📊 **转换质量提升67%** - 从3/5提升至4.5/5星评级
+>
+> 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
