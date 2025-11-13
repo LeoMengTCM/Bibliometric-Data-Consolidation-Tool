@@ -1,0 +1,462 @@
+{
+  "metadata": {
+    "version": "2.0",
+    "created": "2025-11-10 20:41:03",
+    "last_updated": "2025-11-10 20:43:23",
+    "total_institutions": 22,
+    "total_ai_calls": 22
+  },
+  "institutions": {
+    "duke univ health system|durham|usa": {
+      "institution_full_name": "Duke Univ Hlth Syst",
+      "departments": [
+        "Sch Med",
+        "Dept Med"
+      ],
+      "city": "Durham",
+      "state": "NC",
+      "zip_code": "27710",
+      "country": "USA",
+      "confidence": 0.98,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:05",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Duke Univ Health System",
+          "city": "Durham",
+          "country": "USA"
+        }
+      }
+    },
+    "duke cancer inst|durham|usa": {
+      "institution_full_name": "Duke Canc Inst",
+      "departments": [
+        "Oncol & Hematol"
+      ],
+      "city": "Durham",
+      "state": "NC",
+      "zip_code": "27710",
+      "country": "USA",
+      "confidence": 0.98,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:07",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Duke Cancer Inst",
+          "city": "Durham",
+          "country": "USA"
+        }
+      }
+    },
+    "the univ north carolina chapel hill|chapel hill|usa": {
+      "institution_full_name": "Univ N Carolina Chapel Hill",
+      "departments": [
+        "Sch Med",
+        "Dept Biol"
+      ],
+      "city": "Chapel Hill",
+      "state": "NC",
+      "zip_code": "27599",
+      "country": "USA",
+      "confidence": 0.98,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:11",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "The Univ North Carolina Chapel Hill",
+          "city": "Chapel Hill",
+          "country": "USA"
+        }
+      }
+    },
+    "imagerie moléculaire et stratégies théranostiques imost|clermontferrand|france": {
+      "institution_full_name": "Imaging Mol & Theranost Strateg (IMoST)",
+      "departments": [
+        "Mol Imaging",
+        "Theranost"
+      ],
+      "city": "Clermont Ferrand",
+      "state": null,
+      "zip_code": "63000",
+      "country": "France",
+      "confidence": 0.9,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:15",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Imagerie Moléculaire et Stratégies Théranostiques (IMoST)",
+          "city": "Clermont-Ferrand",
+          "country": "France"
+        }
+      }
+    },
+    "adventhealth cancer inst|orlando|usa": {
+      "institution_full_name": "AdventHlth Canc Inst",
+      "departments": [
+        "Oncol & Hematol"
+      ],
+      "city": "Orlando",
+      "state": "FL",
+      "zip_code": "32804",
+      "country": "USA",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:18",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "AdventHealth Cancer Inst",
+          "city": "Orlando",
+          "country": "USA"
+        }
+      }
+    },
+    "faculty med|abu dis|palestine": {
+      "institution_full_name": "Al Quds Univ, Fac Med",
+      "departments": [
+        "Sch Med"
+      ],
+      "city": "Abu Dis",
+      "state": null,
+      "zip_code": null,
+      "country": "Palestine",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:25",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Faculty Med",
+          "city": "Abu Dis",
+          "country": "Palestine"
+        }
+      }
+    },
+    "alquds univ|abu dis|palestine": {
+      "institution_full_name": "Al-Quds Univ",
+      "departments": [
+        "Sch Med",
+        "Dept Biol"
+      ],
+      "city": "Abu Dis",
+      "state": null,
+      "zip_code": "91510",
+      "country": "Palestine",
+      "confidence": 0.9,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:29",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Al-Quds Univ",
+          "city": "Abu Dis",
+          "country": "Palestine"
+        }
+      }
+    },
+    "edith wolfson med ctr israel|holon|israel": {
+      "institution_full_name": "Edith Wolfson Med Ctr",
+      "departments": [
+        "Dept Med",
+        "Dept Surg"
+      ],
+      "city": "Holon",
+      "state": null,
+      "zip_code": "58100",
+      "country": "Israel",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:32",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Edith Wolfson Med Ctr Israel",
+          "city": "Holon",
+          "country": "Israel"
+        }
+      }
+    },
+    "tel aviv univ|tel avivyafo|israel": {
+      "institution_full_name": "Tel Aviv Univ",
+      "departments": [
+        "Sch Med",
+        "Dept Biol Sci"
+      ],
+      "city": "Tel Aviv-Yafo",
+      "state": null,
+      "zip_code": "6997801",
+      "country": "Israel",
+      "confidence": 0.98,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:36",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Tel Aviv Univ",
+          "city": "Tel Aviv-Yafo",
+          "country": "Israel"
+        }
+      }
+    },
+    "institut de cancerologie gustave roussy|villejuif|france": {
+      "institution_full_name": "Inst Canc Gustave Roussy",
+      "departments": [
+        "Oncol & Hematol"
+      ],
+      "city": "Villejuif",
+      "state": null,
+      "zip_code": "94805",
+      "country": "France",
+      "confidence": 0.98,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:39",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Institut de Cancerologie Gustave Roussy",
+          "city": "Villejuif",
+          "country": "France"
+        }
+      }
+    },
+    "azienda ospedalierouniversitaria santandrea|rome|italy": {
+      "institution_full_name": "Azienda Osp Univ Sant Andrea",
+      "departments": [
+        "Dept Med"
+      ],
+      "city": "Rome",
+      "state": null,
+      "zip_code": "00189",
+      "country": "Italy",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:44",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Azienda Ospedaliero-Universitaria Sant'Andrea",
+          "city": "Rome",
+          "country": "Italy"
+        }
+      }
+    },
+    "univ genova|genoa|italy": {
+      "institution_full_name": "Univ Genova",
+      "departments": [
+        "Sch Med",
+        "Dept Phys"
+      ],
+      "city": "Genoa",
+      "state": null,
+      "zip_code": "16126",
+      "country": "Italy",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:47",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Univ Genova",
+          "city": "Genoa",
+          "country": "Italy"
+        }
+      }
+    },
+    "irccs san martino polyclinic hosp|genoa|italy": {
+      "institution_full_name": "IRCCS San Martino Polyclin Hosp",
+      "departments": [
+        "Dept Med",
+        "Dept Surg"
+      ],
+      "city": "Genoa",
+      "state": "Liguria",
+      "zip_code": "16132",
+      "country": "Italy",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:52",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "IRCCS San Martino Polyclinic Hosp",
+          "city": "Genoa",
+          "country": "Italy"
+        }
+      }
+    },
+    "irccs regina elena natl cancer inst|rome|italy": {
+      "institution_full_name": "IRCCS Regina Elena Natl Canc Inst",
+      "departments": [
+        "Med Oncol"
+      ],
+      "city": "Rome",
+      "state": "Lazio",
+      "zip_code": "00144",
+      "country": "Italy",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:55",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "IRCCS Regina Elena Natl Cancer Inst",
+          "city": "Rome",
+          "country": "Italy"
+        }
+      }
+    },
+    "kanagawa cancer ctr res inst|yokohama|japan": {
+      "institution_full_name": "Kanagawa Canc Ctr Res Inst",
+      "departments": [
+        "Oncol & Hematol"
+      ],
+      "city": "Yokohama",
+      "state": "Kanagawa",
+      "zip_code": "241-8515",
+      "country": "Japan",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:41:58",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Kanagawa Cancer Ctr Res Inst",
+          "city": "Yokohama",
+          "country": "Japan"
+        }
+      }
+    },
+    "servicio oncología|florida|argentina": {
+      "institution_full_name": "Servicio Oncol",
+      "departments": [
+        "Oncol & Hematol"
+      ],
+      "city": "Florida",
+      "state": "Buenos Aires",
+      "zip_code": "B1602",
+      "country": "Argentina",
+      "confidence": 0.75,
+      "_metadata": {
+        "added_at": "2025-11-10 20:42:05",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Servicio Oncología",
+          "city": "Florida",
+          "country": "Argentina"
+        }
+      }
+    },
+    "ibima|malaga|spain": {
+      "institution_full_name": "Inst Biomed Res Malaga",
+      "departments": [
+        "Biomed Res",
+        "Clin Res"
+      ],
+      "city": "Malaga",
+      "state": "Malaga",
+      "zip_code": "29010",
+      "country": "Spain",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:42:11",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "IBIMA",
+          "city": "Malaga",
+          "country": "Spain"
+        }
+      }
+    },
+    "the christie nhs foundation trust|manchester|england": {
+      "institution_full_name": "Christie NHS Fdn Trust",
+      "departments": [
+        "Oncol & Hematol"
+      ],
+      "city": "Manchester",
+      "state": null,
+      "zip_code": "M20 4BX",
+      "country": "England",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:42:14",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "The Christie NHS Foundation Trust",
+          "city": "Manchester",
+          "country": "England"
+        }
+      }
+    },
+    "peter maccallum cancer ctr|melbourne|australia": {
+      "institution_full_name": "Peter MacCallum Canc Ctr",
+      "departments": [
+        "Oncol & Hematol"
+      ],
+      "city": "Melbourne",
+      "state": "Victoria",
+      "zip_code": "3000",
+      "country": "Australia",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:42:17",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Peter Maccallum Cancer Ctr",
+          "city": "Melbourne",
+          "country": "Australia"
+        }
+      }
+    },
+    "univ melbourne|melbourne|australia": {
+      "institution_full_name": "Univ Melbourne",
+      "departments": [
+        "Sch Med",
+        "Dept Biol Sci"
+      ],
+      "city": "Melbourne",
+      "state": "Victoria",
+      "zip_code": "3010",
+      "country": "Australia",
+      "confidence": 0.98,
+      "_metadata": {
+        "added_at": "2025-11-10 20:42:20",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Univ Melbourne",
+          "city": "Melbourne",
+          "country": "Australia"
+        }
+      }
+    },
+    "shanghai chest hosp|shanghai|peoples r china": {
+      "institution_full_name": "Shanghai Chest Hosp",
+      "departments": [
+        "Dept Thorac Surg",
+        "Dept Respirat Med"
+      ],
+      "city": "Shanghai",
+      "state": "Shanghai",
+      "zip_code": "200030",
+      "country": "Peoples R China",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:42:23",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "Shanghai Chest Hosp",
+          "city": "Shanghai",
+          "country": "Peoples R China"
+        }
+      }
+    },
+    "istanbul univcerrahpaşa cerrahpaşa faculty med|istanbul|turkiye": {
+      "institution_full_name": "Istanbul Univ-Cerrahpasa, Cerrahpasa Fac Med",
+      "departments": [
+        "Sch Med"
+      ],
+      "city": "Istanbul",
+      "state": null,
+      "zip_code": "34098",
+      "country": "Turkiye",
+      "confidence": 0.95,
+      "_metadata": {
+        "added_at": "2025-11-10 20:42:28",
+        "source": "gemini_ai",
+        "original_query": {
+          "institution": "İstanbul Univ-Cerrahpaşa Cerrahpaşa Faculty Med",
+          "city": "Istanbul",
+          "country": "Turkiye"
+        }
+      }
+    }
+  }
+}
