@@ -34,7 +34,12 @@ from merge_deduplicate import MergeDeduplicateTool
 from filter_language import LanguageFilter
 from analyze_records import RecordAnalyzer
 from clean_institutions import InstitutionCleaner
-from plot_document_types import generate_document_type_analysis
+try:
+    from plot_document_types import generate_document_type_analysis
+    PLOT_AVAILABLE = True
+except ImportError:
+    PLOT_AVAILABLE = False
+    logger.warning("plot_document_types 模块未找到，图表生成功能将被禁用")
 from filter_by_year import YearFilter
 
 logging.basicConfig(
@@ -635,8 +640,14 @@ class AIWorkflow:
         logger.info("步骤8: 生成文档类型分析")
         logger.info("=" * 80)
 
+        if not PLOT_AVAILABLE:
+            logger.warning("⚠ 图表生成功能不可用（缺少依赖）")
+            return True
+
         try:
-            success = generate_document_type_analysis(str(self.data_dir))
+            # 使用年份过滤后的最终文件
+            final_file = self.year_filtered_file if self.year_filtered_file.exists() else self.cleaned_file
+            success = generate_document_type_analysis(str(final_file))
             if success:
                 logger.info("✓ 文档类型分析完成")
                 logger.info("")
