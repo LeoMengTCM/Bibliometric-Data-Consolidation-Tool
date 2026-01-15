@@ -163,27 +163,20 @@ class InstitutionEnricherV2:
         if enriched_info.get('departments'):
             address_parts.extend(enriched_info['departments'])
 
-        # 构建地理信息部分（确保country总是单独的一部分）
-        if enriched_info.get('state') and enriched_info.get('zip_code'):
-            # 美国格式: City, State ZIP, Country
-            # 重要: State和ZIP放在一起，但Country必须单独作为最后一部分
+        # 构建地理信息部分
+        # ⚠️ 关键修复：国家必须始终是最后一个逗号后的独立部分
+        # 这样 merge_deduplicate.py 才能正确提取国家名称
+        if enriched_info.get('city'):
             address_parts.append(enriched_info['city'])
-            address_parts.append(f"{enriched_info['state']} {enriched_info['zip_code']}")
-            address_parts.append(enriched_info['country'])
-        elif enriched_info.get('zip_code'):
-            # 其他格式: City, ZIP, Country
-            # 重要: ZIP单独一部分，Country单独一部分
-            address_parts.append(enriched_info['city'])
-            address_parts.append(enriched_info['zip_code'])
-            address_parts.append(enriched_info['country'])
-        elif enriched_info.get('state'):
-            # 只有state没有ZIP: City, State, Country
-            address_parts.append(enriched_info['city'])
+
+        # 如果有州代码和邮编，分别添加（不合并）
+        if enriched_info.get('state'):
             address_parts.append(enriched_info['state'])
-            address_parts.append(enriched_info['country'])
-        else:
-            # 只有城市和国家
-            address_parts.append(enriched_info['city'])
+        if enriched_info.get('zip_code'):
+            address_parts.append(enriched_info['zip_code'])
+
+        # 国家必须是最后一个独立部分
+        if enriched_info.get('country'):
             address_parts.append(enriched_info['country'])
 
         address_str = ', '.join(address_parts)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-一键式AI增强工作流
+一键式AI增强工作流 v5.0
 
 完整流程：
 1. Scopus CSV → WOS格式转换
@@ -9,13 +9,14 @@
 3. 与WOS数据合并
 4. 去重
 5. 语言筛选（可选）
-6. 机构名称清洗（可选）⭐ NEW
-7. 生成统计报告
+6. 年份范围过滤（可选）
+7. 机构名称清洗（可选）
+8. 生成统计报告
 
 作者：Meng Linghan
 开发工具：Claude Code
-日期：2025-11-12
-版本：v2.0
+日期：2026-01-15
+版本：v5.0.0 (Stable Release)
 """
 
 import os
@@ -35,7 +36,7 @@ from filter_language import LanguageFilter
 from analyze_records import RecordAnalyzer
 from clean_institutions import InstitutionCleaner
 try:
-    from plot_document_types import generate_document_type_analysis
+    from plot_document_types import generate_all_figures
     PLOT_AVAILABLE = True
 except ImportError:
     PLOT_AVAILABLE = False
@@ -55,7 +56,7 @@ class AIWorkflow:
 
     def __init__(self, data_dir: str, language: str = 'English', enable_ai: bool = True,
                  enable_cleaning: bool = True, cleaning_config: str = 'config/institution_cleaning_rules_ultimate.json',
-                 year_range: Optional[str] = None):
+                 year_range: Optional[str] = None, enable_plot: bool = True, progress_callback=None):
         """
         初始化工作流
 
@@ -66,23 +67,31 @@ class AIWorkflow:
             enable_cleaning: 是否启用机构清洗（默认True）⭐ NEW
             cleaning_config: 清洗规则配置文件（默认使用增强版）⭐ NEW
             year_range: 年份范围过滤（格式: YYYY-YYYY，如2015-2024）⭐ NEW
+            enable_plot: 是否生成图表（默认True）⭐ NEW
+            progress_callback: 进度回调函数，接收(step_name: str, progress: float)参数 ⭐ GUI支持
         """
         self.data_dir = Path(data_dir)
         self.language = language
         self.enable_ai = enable_ai
         self.enable_cleaning = enable_cleaning
+        self.enable_plot = enable_plot  # ⭐ 新增：是否生成图表
         self.cleaning_config = cleaning_config
         self.year_range = year_range
+        self.progress_callback = progress_callback  # ⭐ 新增：进度回调
 
         # 定义文件路径
         self.wos_file = self.data_dir / 'wos.txt'
         self.scopus_file = self.data_dir / 'scopus.csv'
+
+        # 年份过滤后的原始文件（如果启用年份过滤）
+        self.wos_year_filtered = self.data_dir / 'wos_year_filtered.txt'
+        self.scopus_year_filtered = self.data_dir / 'scopus_year_filtered.csv'
+
         self.scopus_converted = self.data_dir / 'scopus_converted_to_wos.txt'
         self.scopus_enriched = self.data_dir / 'scopus_enriched.txt'
         self.merged_file = self.data_dir / 'merged_deduplicated.txt'
         self.filtered_file = self.data_dir / f'{language.lower()}_only.txt'
         self.cleaned_file = self.data_dir / 'Final_Version.txt'  # ⭐ 清洗后的文件
-        self.year_filtered_file = self.data_dir / 'Final_Version_Year_Filtered.txt'  # ⭐ NEW 年份过滤后的最终文件
         self.report_file = self.data_dir / 'ai_workflow_report.txt'
 
         # 统计信息
@@ -90,6 +99,14 @@ class AIWorkflow:
             'start_time': time.time(),
             'steps': []
         }
+
+    def _update_progress(self, step_name: str, progress: float):
+        """更新进度（如果提供了回调函数）"""
+        if self.progress_callback:
+            try:
+                self.progress_callback(step_name, progress)
+            except Exception as e:
+                logger.warning(f"进度回调失败: {e}")
 
     def check_files(self) -> bool:
         """检查必需文件是否存在"""
@@ -111,15 +128,166 @@ class AIWorkflow:
 
         return True
 
-    def step1_convert_scopus(self) -> bool:
-        """步骤1: 转换Scopus到WOS格式（含WOS标准化）"""
+    def step1_filter_wos_by_year(self) -> bool:
+        """步骤1: 年份范围过滤WOS数据（如果启用）⭐ NEW"""
         logger.info("=" * 80)
-        logger.info("步骤1: 转换Scopus到WOS格式（含WOS标准化）")
+        logger.info("步骤1: 年份范围过滤WOS数据")
         logger.info("=" * 80)
 
         try:
+            # 解析年份范围
+            import re
+            match = re.match(r'^(\d{4})-(\d{4})$', self.year_range)
+            if not match:
+                raise ValueError(f"年份范围格式错误: {self.year_range}，应为 YYYY-YYYY 格式（如 2015-2024）")
+
+            min_year = int(match.group(1))
+            max_year = int(match.group(2))
+
+            if min_year > max_year:
+                raise ValueError(f"最小年份 ({min_year}) 不能大于最大年份 ({max_year})")
+
+            logger.info(f"年份范围: {min_year}-{max_year}")
+
+            # 创建年份过滤器
+            year_filter = YearFilter(min_year=min_year, max_year=max_year)
+
+            # 生成报告文件名
+            report_file = str(self.wos_year_filtered).replace('.txt', '_year_filter_report.txt')
+
+            # 执行过滤
+            year_filter.filter_file(str(self.wos_file), str(self.wos_year_filtered), report_file)
+
+            # 获取统计信息
+            year_stats = {
+                'total_records': year_filter.stats['total_records'],
+                'filtered_records': year_filter.stats['filtered_records'],
+                'kept_records': year_filter.stats['total_records'] - year_filter.stats['filtered_records'],
+                'filter_rate': year_filter.stats['filtered_records'] / year_filter.stats['total_records'] * 100
+                              if year_filter.stats['total_records'] > 0 else 0,
+                'filtered_years': dict(year_filter.stats['filtered_years'])
+            }
+
+            logger.info(f"✓ WOS年份过滤完成: {self.wos_year_filtered}")
+            logger.info("")
+
+            self.stats['steps'].append({
+                'step': 1,
+                'name': 'WOS年份范围过滤',
+                'status': 'success',
+                'output': str(self.wos_year_filtered),
+                'year_stats': year_stats
+            })
+
+            return True
+
+        except Exception as e:
+            logger.error(f"✗ WOS年份过滤失败: {e}")
+            self.stats['steps'].append({
+                'step': 1,
+                'name': 'WOS年份范围过滤',
+                'status': 'failed',
+                'error': str(e)
+            })
+            return False
+
+    def step2_filter_scopus_by_year(self) -> bool:
+        """步骤2: 年份范围过滤Scopus CSV数据（如果启用）⭐ NEW"""
+        logger.info("=" * 80)
+        logger.info("步骤2: 年份范围过滤Scopus数据")
+        logger.info("=" * 80)
+
+        try:
+            import csv
+            import re
+            match = re.match(r'^(\d{4})-(\d{4})$', self.year_range)
+            min_year = int(match.group(1))
+            max_year = int(match.group(2))
+
+            logger.info(f"年份范围: {min_year}-{max_year}")
+
+            # 读取Scopus CSV
+            filtered_rows = []
+            header = None
+            total_records = 0
+            filtered_records = 0
+            filtered_years = {}
+
+            with open(self.scopus_file, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                header = reader.fieldnames
+
+                for row in reader:
+                    total_records += 1
+                    year_str = row.get('Year', '')
+
+                    # 检查年份
+                    if year_str and year_str.isdigit():
+                        year = int(year_str)
+                        if min_year <= year <= max_year:
+                            filtered_rows.append(row)
+                        else:
+                            filtered_records += 1
+                            filtered_years[year_str] = filtered_years.get(year_str, 0) + 1
+                    else:
+                        # 没有年份信息，保留
+                        filtered_rows.append(row)
+
+            # 写入过滤后的CSV
+            with open(self.scopus_year_filtered, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=header)
+                writer.writeheader()
+                writer.writerows(filtered_rows)
+
+            kept_records = total_records - filtered_records
+
+            logger.info(f"✓ Scopus年份过滤完成: {self.scopus_year_filtered}")
+            logger.info(f"  原始记录: {total_records}")
+            logger.info(f"  保留记录: {kept_records}")
+            logger.info(f"  过滤掉: {filtered_records}")
+            logger.info("")
+
+            # 统计信息
+            year_stats = {
+                'total_records': total_records,
+                'filtered_records': filtered_records,
+                'kept_records': kept_records,
+                'filter_rate': filtered_records / total_records * 100 if total_records > 0 else 0,
+                'filtered_years': filtered_years
+            }
+
+            self.stats['steps'].append({
+                'step': 2,
+                'name': 'Scopus年份范围过滤',
+                'status': 'success',
+                'output': str(self.scopus_year_filtered),
+                'year_stats': year_stats
+            })
+
+            return True
+
+        except Exception as e:
+            logger.error(f"✗ Scopus年份过滤失败: {e}")
+            self.stats['steps'].append({
+                'step': 2,
+                'name': 'Scopus年份范围过滤',
+                'status': 'failed',
+                'error': str(e)
+            })
+            return False
+
+    def step3_convert_scopus(self) -> bool:
+        """步骤3: 转换Scopus到WOS格式（含WOS标准化）"""
+        logger.info("=" * 80)
+        logger.info("步骤3: 转换Scopus到WOS格式（含WOS标准化）")
+        logger.info("=" * 80)
+
+        try:
+            # 如果启用了年份过滤，使用过滤后的文件；否则使用原始文件
+            input_file = self.scopus_year_filtered if self.year_range else self.scopus_file
+
             converter = EnhancedConverterBatchV2(
-                str(self.scopus_file),
+                str(input_file),
                 str(self.scopus_converted),
                 enable_standardization=True,
                 max_workers=20,
@@ -131,7 +299,7 @@ class AIWorkflow:
             logger.info("")
 
             self.stats['steps'].append({
-                'step': 1,
+                'step': 3,
                 'name': 'Scopus格式转换+WOS标准化',
                 'status': 'success',
                 'output': str(self.scopus_converted)
@@ -142,15 +310,15 @@ class AIWorkflow:
         except Exception as e:
             logger.error(f"✗ 转换失败: {e}")
             self.stats['steps'].append({
-                'step': 1,
+                'step': 3,
                 'name': 'Scopus格式转换+WOS标准化',
                 'status': 'failed',
                 'error': str(e)
             })
             return False
 
-    def step2_ai_enrich(self) -> bool:
-        """步骤2: AI智能补全机构信息"""
+    def step4_ai_enrich(self) -> bool:
+        """步骤4: AI智能补全机构信息"""
         if not self.enable_ai:
             logger.info("跳过AI补全步骤（未启用）")
             # 直接复制文件
@@ -159,7 +327,7 @@ class AIWorkflow:
             return True
 
         logger.info("=" * 80)
-        logger.info("步骤2: AI智能补全机构信息")
+        logger.info("步骤4: AI智能补全机构信息")
         logger.info("=" * 80)
 
         try:
@@ -192,7 +360,7 @@ class AIWorkflow:
             enricher.print_statistics()
 
             self.stats['steps'].append({
-                'step': 2,
+                'step': 4,
                 'name': 'AI智能补全',
                 'status': 'success',
                 'output': str(self.scopus_enriched),
@@ -204,25 +372,28 @@ class AIWorkflow:
         except Exception as e:
             logger.error(f"✗ AI补全失败: {e}")
             self.stats['steps'].append({
-                'step': 2,
+                'step': 4,
                 'name': 'AI智能补全',
                 'status': 'failed',
                 'error': str(e)
             })
             return False
 
-    def step3_merge_deduplicate(self) -> bool:
-        """步骤3: 合并与去重"""
+    def step5_merge_deduplicate(self) -> bool:
+        """步骤5: 合并与去重"""
         logger.info("=" * 80)
-        logger.info("步骤3: 合并与去重")
+        logger.info("步骤5: 合并与去重")
         logger.info("=" * 80)
 
         try:
             # 使用AI补全后的文件（如果启用）或原始转换文件
             scopus_input = self.scopus_enriched if self.enable_ai else self.scopus_converted
 
+            # 如果启用了年份过滤，使用过滤后的WOS文件；否则使用原始WOS文件
+            wos_input = self.wos_year_filtered if self.year_range else self.wos_file
+
             tool = MergeDeduplicateTool(
-                str(self.wos_file),
+                str(wos_input),
                 str(scopus_input),
                 str(self.merged_file)
             )
@@ -241,7 +412,7 @@ class AIWorkflow:
             logger.info("")
 
             self.stats['steps'].append({
-                'step': 3,
+                'step': 5,
                 'name': '合并与去重',
                 'status': 'success',
                 'output': str(self.merged_file),
@@ -253,17 +424,17 @@ class AIWorkflow:
         except Exception as e:
             logger.error(f"✗ 合并去重失败: {e}")
             self.stats['steps'].append({
-                'step': 3,
+                'step': 5,
                 'name': '合并与去重',
                 'status': 'failed',
                 'error': str(e)
             })
             return False
 
-    def step4_filter_language(self) -> bool:
-        """步骤4: 语言筛选"""
+    def step6_filter_language(self) -> bool:
+        """步骤6: 语言筛选"""
         logger.info("=" * 80)
-        logger.info(f"步骤4: 语言筛选（{self.language}）")
+        logger.info(f"步骤6: 语言筛选（{self.language}）")
         logger.info("=" * 80)
 
         try:
@@ -279,7 +450,7 @@ class AIWorkflow:
             logger.info("")
 
             self.stats['steps'].append({
-                'step': 4,
+                'step': 6,
                 'name': f'语言筛选（{self.language}）',
                 'status': 'success',
                 'output': str(self.filtered_file),
@@ -291,22 +462,22 @@ class AIWorkflow:
         except Exception as e:
             logger.error(f"✗ 语言筛选失败: {e}")
             self.stats['steps'].append({
-                'step': 4,
+                'step': 6,
                 'name': f'语言筛选（{self.language}）',
                 'status': 'failed',
                 'error': str(e)
             })
             return False
 
-    def step5_clean_institutions(self) -> bool:
-        """步骤5: 机构名称清洗（可选）⭐ NEW"""
+    def step7_clean_institutions(self) -> bool:
+        """步骤7: 机构名称清洗（可选）"""
         if not self.enable_cleaning:
             logger.info("跳过机构清洗步骤（未启用）")
             logger.info("")
             return True
 
         logger.info("=" * 80)
-        logger.info("步骤5: 机构名称清洗")
+        logger.info("步骤7: 机构名称清洗")
         logger.info("=" * 80)
 
         try:
@@ -329,7 +500,7 @@ class AIWorkflow:
             logger.info("")
 
             self.stats['steps'].append({
-                'step': 5,
+                'step': 7,
                 'name': '机构名称清洗',
                 'status': 'success',
                 'output': str(self.cleaned_file),
@@ -341,21 +512,21 @@ class AIWorkflow:
         except Exception as e:
             logger.error(f"✗ 机构清洗失败: {e}")
             self.stats['steps'].append({
-                'step': 5,
+                'step': 7,
                 'name': '机构名称清洗',
                 'status': 'failed',
                 'error': str(e)
             })
             return False
 
-    def step6_analyze(self) -> bool:
-        """步骤6: 统计分析"""
+    def step8_analyze(self) -> bool:
+        """步骤8: 统计分析（只分析一次，分析最终文件）"""
         logger.info("=" * 80)
-        logger.info("步骤6: 统计分析")
+        logger.info("步骤8: 统计分析")
         logger.info("=" * 80)
 
         try:
-            # 如果启用了清洗，分析清洗后的文件；否则分析筛选后的文件
+            # 确定最终分析文件：优先使用清洗后的文件，否则使用筛选后的文件
             analysis_file = self.cleaned_file if self.enable_cleaning else self.filtered_file
 
             analyzer = RecordAnalyzer(str(analysis_file))
@@ -368,7 +539,7 @@ class AIWorkflow:
             logger.info("")
 
             self.stats['steps'].append({
-                'step': 6,
+                'step': 8,
                 'name': '统计分析',
                 'status': 'success',
                 'output': analysis_report_file
@@ -379,79 +550,8 @@ class AIWorkflow:
         except Exception as e:
             logger.error(f"✗ 统计分析失败: {e}")
             self.stats['steps'].append({
-                'step': 6,
+                'step': 8,
                 'name': '统计分析',
-                'status': 'failed',
-                'error': str(e)
-            })
-            return False
-
-    def step7_filter_by_year(self) -> bool:
-        """步骤7: 年份范围过滤（可选）⭐ NEW"""
-        if not self.year_range:
-            logger.info("跳过年份过滤步骤（未指定年份范围）")
-            logger.info("")
-            return True
-
-        logger.info("=" * 80)
-        logger.info("步骤7: 年份范围过滤")
-        logger.info("=" * 80)
-
-        try:
-            # 解析年份范围
-            import re
-            match = re.match(r'^(\d{4})-(\d{4})$', self.year_range)
-            if not match:
-                raise ValueError(f"年份范围格式错误: {self.year_range}，应为 YYYY-YYYY 格式（如 2015-2024）")
-
-            min_year = int(match.group(1))
-            max_year = int(match.group(2))
-
-            if min_year > max_year:
-                raise ValueError(f"最小年份 ({min_year}) 不能大于最大年份 ({max_year})")
-
-            logger.info(f"年份范围: {min_year}-{max_year}")
-
-            # 确定输入文件（优先使用清洗后的文件）
-            input_file = self.cleaned_file if self.enable_cleaning else self.filtered_file
-
-            # 创建年份过滤器
-            year_filter = YearFilter(min_year=min_year, max_year=max_year)
-
-            # 生成报告文件名
-            report_file = str(self.year_filtered_file).replace('.txt', '_year_filter_report.txt')
-
-            # 执行过滤
-            year_filter.filter_file(str(input_file), str(self.year_filtered_file), report_file)
-
-            # 获取统计信息
-            year_stats = {
-                'total_records': year_filter.stats['total_records'],
-                'filtered_records': year_filter.stats['filtered_records'],
-                'kept_records': year_filter.stats['total_records'] - year_filter.stats['filtered_records'],
-                'filter_rate': year_filter.stats['filtered_records'] / year_filter.stats['total_records'] * 100
-                              if year_filter.stats['total_records'] > 0 else 0,
-                'filtered_years': dict(year_filter.stats['filtered_years'])
-            }
-
-            logger.info(f"✓ 年份过滤完成: {self.year_filtered_file}")
-            logger.info("")
-
-            self.stats['steps'].append({
-                'step': 7,
-                'name': '年份范围过滤',
-                'status': 'success',
-                'output': str(self.year_filtered_file),
-                'year_stats': year_stats
-            })
-
-            return True
-
-        except Exception as e:
-            logger.error(f"✗ 年份过滤失败: {e}")
-            self.stats['steps'].append({
-                'step': 7,
-                'name': '年份范围过滤',
                 'status': 'failed',
                 'error': str(e)
             })
@@ -549,6 +649,14 @@ class AIWorkflow:
         report.append("=" * 80)
         report.append("")
         file_num = 1
+
+        # 如果启用了年份过滤，显示过滤后的原始文件
+        if self.year_range:
+            report.append(f"{file_num}. WOS年份过滤后: {self.wos_year_filtered}")
+            file_num += 1
+            report.append(f"{file_num}. Scopus年份过滤后: {self.scopus_year_filtered}")
+            file_num += 1
+
         report.append(f"{file_num}. 转换后的Scopus数据: {self.scopus_converted}")
         file_num += 1
         if self.enable_ai:
@@ -559,19 +667,11 @@ class AIWorkflow:
         report.append(f"{file_num}. {self.language}筛选后的数据: {self.filtered_file}")
         file_num += 1
         if self.enable_cleaning:
-            report.append(f"{file_num}. 机构清洗后的数据: {self.cleaned_file}")
-            file_num += 1
-        if self.year_range:
-            report.append(f"{file_num}. 年份过滤后的数据: {self.year_filtered_file} ⭐ 推荐")
+            report.append(f"{file_num}. 机构清洗后的数据: {self.cleaned_file} ⭐ 推荐")
             file_num += 1
 
         # 确定最终分析文件
-        if self.year_range:
-            final_analysis_file = self.year_filtered_file
-        elif self.enable_cleaning:
-            final_analysis_file = self.cleaned_file
-        else:
-            final_analysis_file = self.filtered_file
+        final_analysis_file = self.cleaned_file if self.enable_cleaning else self.filtered_file
 
         report.append(f"{file_num}. 统计分析报告: {str(final_analysis_file).replace('.txt', '_analysis_report.txt')}")
         report.append("")
@@ -583,9 +683,9 @@ class AIWorkflow:
         report.append("")
         report.append(f"✓ 用于VOSViewer/CiteSpace分析: {final_analysis_file}")
         if self.year_range:
-            report.append(f"  （已过滤异常年份，数据更准确）⭐ 强烈推荐")
-        elif self.enable_cleaning:
-            report.append(f"  （已清洗，唯一机构数减少约20%，推荐使用）")
+            report.append(f"  （已在源头过滤年份，数据更准确）⭐ 强烈推荐")
+        if self.enable_cleaning:
+            report.append(f"  （已清洗，唯一机构数减少约20%）")
         report.append(f"✓ 用于论文写作参考: {str(final_analysis_file).replace('.txt', '_analysis_report.txt')}")
         report.append("")
 
@@ -634,10 +734,10 @@ class AIWorkflow:
             logger.error(f"✗ 创建文件夹结构失败: {e}")
             return False
 
-    def step8_generate_document_type_plot(self) -> bool:
-        """生成文档类型分析图表"""
+    def step10_generate_document_type_plot(self) -> bool:
+        """生成所有图表（文档类型 + 年度发文及引用量）"""
         logger.info("=" * 80)
-        logger.info("步骤8: 生成文档类型分析")
+        logger.info("步骤10: 生成所有图表")
         logger.info("=" * 80)
 
         if not PLOT_AVAILABLE:
@@ -645,15 +745,24 @@ class AIWorkflow:
             return True
 
         try:
-            # 使用年份过滤后的最终文件
-            final_file = self.year_filtered_file if self.year_filtered_file.exists() else self.cleaned_file
-            success = generate_document_type_analysis(str(final_file))
+            # 提取年份范围参数
+            min_year = None
+            max_year = None
+            if self.year_range:
+                import re
+                match = re.match(r'^(\d{4})-(\d{4})$', self.year_range)
+                if match:
+                    min_year = int(match.group(1))
+                    max_year = int(match.group(2))
+
+            # 传递数据目录和年份参数，生成所有图表
+            success = generate_all_figures(str(self.data_dir), min_year, max_year)
             if success:
-                logger.info("✓ 文档类型分析完成")
+                logger.info("✓ 所有图表生成完成")
                 logger.info("")
             return success
         except Exception as e:
-            logger.error(f"✗ 文档类型分析失败: {e}")
+            logger.error(f"✗ 图表生成失败: {e}")
             return False
 
     def run(self) -> bool:
@@ -664,63 +773,96 @@ class AIWorkflow:
         logger.info("=" * 80)
         logger.info("")
 
+        # 计算总步骤数
+        total_steps = 8  # 基础步骤：3转换 + 4AI + 5合并 + 6语言 + 7清洗 + 8分析 + 9结构 + 10图表
+        if self.year_range:
+            total_steps += 2  # 增加步骤1和2（年份过滤）
+        current_step = 0
+
         # 检查文件
+        self._update_progress("正在检查输入文件...", 0.0)
         if not self.check_files():
             return False
 
-        # 步骤1: 转换Scopus
-        if not self.step1_convert_scopus():
-            return False
-
-        # 步骤2: AI补全
-        if not self.step2_ai_enrich():
-            return False
-
-        # 步骤3: 合并去重
-        if not self.step3_merge_deduplicate():
-            return False
-
-        # 步骤4: 语言筛选
-        if not self.step4_filter_language():
-            return False
-
-        # 步骤5: 机构清洗（可选）⭐ NEW
-        if not self.step5_clean_institutions():
-            return False
-
-        # 步骤6: 统计分析（第一次，分析清洗后的文件）
-        if not self.step6_analyze():
-            return False
-
-        # 步骤7: 年份范围过滤（可选）⭐ NEW
-        if not self.step7_filter_by_year():
-            return False
-
-        # 如果启用了年份过滤，需要重新分析过滤后的文件
+        # 步骤1: 年份范围过滤WOS数据（如果启用）⭐ 最优先
         if self.year_range:
-            logger.info("=" * 80)
-            logger.info("重新分析年份过滤后的数据")
-            logger.info("=" * 80)
-            try:
-                analyzer = RecordAnalyzer(str(self.year_filtered_file))
-                analyzer.analyze()
-                analysis_report_file = str(self.year_filtered_file).replace('.txt', '_analysis_report.txt')
-                logger.info(f"✓ 年份过滤后的数据分析完成: {analysis_report_file}")
-                logger.info("")
-            except Exception as e:
-                logger.error(f"✗ 年份过滤后的数据分析失败: {e}")
+            current_step += 1
+            self._update_progress(f"步骤{current_step}/{total_steps}: 年份过滤WOS数据...", current_step / total_steps)
+            if not self.step1_filter_wos_by_year():
+                return False
 
-        # 步骤8: 创建项目文件夹结构
+        # 步骤2: 年份范围过滤Scopus数据（如果启用）⭐ 第二优先
+        if self.year_range:
+            current_step += 1
+            self._update_progress(f"步骤{current_step}/{total_steps}: 年份过滤Scopus数据...", current_step / total_steps)
+            if not self.step2_filter_scopus_by_year():
+                return False
+
+        # 步骤3: 转换Scopus（使用过滤后的文件）
+        current_step += 1
+        self._update_progress(f"步骤{current_step}/{total_steps}: 转换Scopus到WOS格式...", current_step / total_steps)
+        if not self.step3_convert_scopus():
+            return False
+
+        # 步骤4: AI补全
+        current_step += 1
+        if self.enable_ai:
+            self._update_progress(f"步骤{current_step}/{total_steps}: AI智能补全机构信息...", current_step / total_steps)
+        else:
+            self._update_progress(f"步骤{current_step}/{total_steps}: 跳过AI补全...", current_step / total_steps)
+        if not self.step4_ai_enrich():
+            return False
+
+        # 步骤5: 合并去重
+        current_step += 1
+        self._update_progress(f"步骤{current_step}/{total_steps}: 合并与去重...", current_step / total_steps)
+        if not self.step5_merge_deduplicate():
+            return False
+
+        # 步骤6: 语言筛选
+        current_step += 1
+        self._update_progress(f"步骤{current_step}/{total_steps}: 语言筛选（{self.language}）...", current_step / total_steps)
+        if not self.step6_filter_language():
+            return False
+
+        # 步骤7: 机构清洗（可选）
+        current_step += 1
+        if self.enable_cleaning:
+            self._update_progress(f"步骤{current_step}/{total_steps}: 机构名称清洗...", current_step / total_steps)
+        else:
+            self._update_progress(f"步骤{current_step}/{total_steps}: 跳过机构清洗...", current_step / total_steps)
+        if not self.step7_clean_institutions():
+            return False
+
+        # 步骤8: 统计分析（只分析一次，分析最终文件）
+        current_step += 1
+        self._update_progress(f"步骤{current_step}/{total_steps}: 统计分析...", current_step / total_steps)
+        if not self.step8_analyze():
+            return False
+
+        # 步骤9: 创建项目文件夹结构
+        current_step += 1
+        self._update_progress(f"步骤{current_step}/{total_steps}: 创建项目结构...", current_step / total_steps)
         if not self.create_project_structure():
             return False
 
-        # 步骤9: 生成文档类型分析
-        if not self.step8_generate_document_type_plot():
-            return False
+        # 步骤10: 生成文档类型分析（可选，失败不影响整体流程）
+        current_step += 1
+        if self.enable_plot:
+            self._update_progress(f"步骤{current_step}/{total_steps}: 生成图表...", current_step / total_steps)
+            try:
+                self.step10_generate_document_type_plot()
+            except Exception as e:
+                logger.warning(f"⚠ 文档类型分析跳过: {e}")
+                logger.info("提示: 如需生成图表，请安装 matplotlib: pip3 install matplotlib")
+        else:
+            self._update_progress(f"步骤{current_step}/{total_steps}: 跳过图表生成...", current_step / total_steps)
+            logger.info("跳过图表生成（未启用）")
 
         # 生成报告
         self.generate_report()
 
+        self._update_progress("✓ 处理完成！", 1.0)
         logger.info("=" * 80)
         logger.info("✓ 工作流全部完成！")
         logger.info("=" * 80)

@@ -8,14 +8,15 @@ Bibliometric data processing tools for integrating Scopus and Web of Science (WO
 
 **Primary Use Case**: Enable researchers to combine Scopus and WOS data for comprehensive bibliometric analysis using tools like CiteSpace, VOSviewer, and Bibliometrix.
 
-**Version**: v4.3.0 (Year Range Filtering) (2025-11-13)
+**Version**: v5.0.0 (Stable Release) (2026-01-15)
 
 **Key Features**:
 - Format conversion (Scopus CSV → WOS plain text)
-- **Batch concurrent processing** ⚡ v4.0.1
-  - 20-thread concurrent processing (20-30x speed improvement)
-  - 3 minutes for 660 records vs 70-80 minutes
+- **Batch concurrent processing** ⚡ v4.0.1 (optimized v4.5.2)
+  - 5-thread concurrent processing (rate-limited to prevent 429 errors)
+  - 3-5 minutes for 660 records vs 70-80 minutes
   - 297 API calls vs 7000+ (95% cost reduction)
+  - Intelligent rate limiting with exponential backoff
 - **WOS format standardization (AI-driven)** ⭐
   - Country name WOS standardization (China → Peoples R China)
   - Journal name WOS abbreviation (Journal of XXX → J XXX)
@@ -26,11 +27,23 @@ Bibliometric data processing tools for integrating Scopus and Web of Science (WO
   - ZIP/postal code completion
   - Department information enrichment
   - WOS-standard abbreviations
-- **Year range filtering** ⭐ NEW v4.3.0
+  - **C1 format fix (v4.5.1)**: Country always as last independent part
+- **Year range filtering** ⭐ v4.3.0
   - Filter records by custom year range (e.g., 2015-2024)
   - Remove Early Access articles (2025-2026) and historical references (pre-2015)
   - Automatic anomaly detection and reporting
   - Integrated into one-click workflow
+  - **Year filtering first architecture (v4.5.0)**: Filter at source for efficiency
+- **WOS Format Alignment** ⭐ v4.4.0
+  - Scopus-unique records automatically aligned to WOS standard formats
+  - Institution, journal, country, author names use WOS format when available
+  - Ensures format consistency across all records
+  - C1 country extraction with strict validation (v4.4.1 fix)
+- **Institution cleaning** ⭐ v4.3.0
+  - Remove noise data and person names (v4.5.1 fix)
+  - Merge parent-child institutions
+  - Standardize name variants
+  - 20% reduction in unique institutions
 - Intelligent merge and deduplication
 - Language filtering (e.g., English-only)
 - Statistical analysis (country, institution, author distribution)
@@ -61,8 +74,11 @@ Input Files:
          ↓
     scopus_enriched.txt
          ↓
-    [Step 3: Merge & Deduplicate]
+    [Step 3: Merge & Deduplicate + WOS Format Alignment] ⭐ v4.4.0
     merge_deduplicate.py
+    - Extract WOS standard formats (institutions, journals, countries, authors)
+    - Align Scopus-unique records to WOS standards
+    - Strict C1 country validation (v4.4.1)
          ↓
     merged_deduplicated.txt
          ↓
@@ -154,10 +170,18 @@ run_ai_workflow.py --data-dir "/path/to/data" --year-range 2015-2024
   - `JOURNAL_ABBREV`: 50+ common journal name to abbreviation mappings
   - `MONTH_ABBREV`: Month name/number to 3-letter abbreviation
 
-**2. merge_deduplicate.py** - Merge & Deduplication Tool
+**2. merge_deduplicate.py** - Merge & Deduplication Tool with WOS Format Alignment ⭐ v4.4.0
 - **WOSRecordParser**: Parses WOS plain text format into structured records
   - Handles multi-line field continuations (3-space indent)
   - Preserves field order and formatting
+
+- **WOSStandardExtractor** ⭐ NEW v4.4.0: Extracts and applies WOS standard formats
+  - Extracts institution names (C3 field) from WOS records
+  - Extracts journal names (SO field) from WOS records
+  - Extracts country names (C1 field) with strict validation (v4.4.1)
+  - Extracts author names (AU field) from WOS records
+  - `_is_valid_country()`: Validates country names, excludes person names/state codes
+  - `standardize_scopus_record()`: Aligns Scopus-unique records to WOS standards
 
 - **RecordMatcher**: Identifies duplicate records between WOS and Scopus
   - Primary strategy: DOI matching (100% accuracy)
@@ -167,11 +191,14 @@ run_ai_workflow.py --data-dir "/path/to/data" --year-range 2015-2024
   - WOS records take priority (more complete data)
   - Scopus supplements missing WOS fields
   - Citation count: takes maximum of both sources
+  - C1/C3 fields: Strictly use WOS format, only supplement if completely missing
 
-- **MergeDeduplicateTool**: Orchestrates the merge workflow
-  - Identifies WOS-Scopus duplicates
-  - Merges duplicate pairs (WOS-priority)
-  - Preserves Scopus-unique records
+- **MergeDeduplicateTool**: Orchestrates the merge workflow (5 steps)
+  - Step 1: Read WOS and Scopus files
+  - Step 2: Extract WOS standard formats ⭐ NEW
+  - Step 3: Identify WOS-Scopus duplicates
+  - Step 4: Merge records with WOS format alignment ⭐ NEW
+  - Step 5: Write output with standardization statistics
 
 **3. filter_language.py** - Language Filter Tool (v2.1+)
 - **LanguageFilter**: Filters records by language
@@ -563,6 +590,49 @@ The matcher uses a two-tier approach:
 
 **Location**: `merge_deduplicate.py:100-170` (`RecordMatcher`)
 
+### WOS Format Alignment (v4.4.0+)
+
+**Purpose**: Ensure Scopus-unique records (not in WOS) use WOS standard formats for institution/journal/country/author names.
+
+**Implementation** (`merge_deduplicate.py`):
+1. **Extract WOS Standards**: Parse all WOS records to build dictionaries of standard formats
+   - Institutions (C3): `{lowercase: WOS_format}`
+   - Journals (SO): `{lowercase: WOS_format}`
+   - Countries (C1): `{lowercase: WOS_format}` with strict validation
+   - Authors (AU): `{lowercase: WOS_format}`
+
+2. **Validate Country Names** (v4.4.1 critical fix):
+   - **Excludes person names**: "Aaron M", "Abdallah S" (Name + single letter)
+   - **Excludes state codes**: "AL USA", "CA USA" (2-letter + USA)
+   - **Excludes numbers**: Postal codes, building numbers
+   - **Validates length**: 4-30 characters typical for countries
+   - **Common WOS countries**: 50+ countries in reference list (Peoples R China, USA, England, etc.)
+   - **Multi-word validation**: All words must be > 1 letter (not initials)
+
+3. **Align Scopus-unique records**:
+   - Check each field (institution/journal/country/author)
+   - If value appears in WOS dictionary → use WOS format
+   - If not in WOS → keep Scopus format
+   - Apply alignment to C1, C3, SO, AU fields
+
+**Benefits**:
+- Prevents format inconsistencies in bibliometric tools
+- Avoids duplicate entities (same institution with different capitalization)
+- Critical for VOSviewer/CiteSpace accuracy
+
+**Statistics Reported**:
+```
+Scopus独有记录:         150 条（已保留）
+  ⭐ Scopus独有记录标准化: 150 条
+     （机构、期刊、国家、作者已对齐WOS格式）
+```
+
+**Location**: `merge_deduplicate.py:192-303` (`WOSStandardExtractor`), `merge_deduplicate.py:510-545` (`merge_records`)
+
+**Related Documentation**:
+- `WOS_FORMAT_ALIGNMENT.md`: Detailed alignment logic and examples
+- `C1_COUNTRY_EXTRACTION_FIX.md`: C1 country validation fixes
+
 ## Known Limitations
 
 1. **Author Full Names (AF field)**: Scopus sometimes provides only abbreviated names, not full names
@@ -570,8 +640,65 @@ The matcher uses a two-tier approach:
 2. **Reference Citations (CR field)**: Author initials may be missing, volume/page numbers may be imprecise due to format differences
 3. **Institution Address Format (C1 field)**: Scopus groups by author, WOS groups by institution - semantic equivalent but structurally different
    - **Mitigation (v3.2.0+)**: AI enrichment adds missing state codes, ZIP codes, and departments, improving completeness from 60% to 95%
+   - **Fixed (v4.5.1)**: C1 format now ensures country is always the last independent comma-separated part
 
 These limitations are documented in `example/检验报告_v3.2.0.md` with detailed comparisons to real WOS data.
+
+## Recent Critical Fixes
+
+### v4.5.2 - API Rate Limit Fix (2025-11-20) ⭐ CRITICAL
+
+**Problem**: 频繁遇到429错误（Too Many Requests），导致AI补全失败。
+
+**Root Causes**:
+1. 并发线程数过多（50个线程同时调用API）
+2. 延迟位置错误（在API调用后延迟）
+3. 批量调用缺少延迟（连续发送请求）
+4. 429错误处理不完善（固定等待时间）
+
+**Fixes**:
+1. **降低并发线程数**: 50 → 5 (降低90%)
+2. **修复延迟位置**: 延迟移到API调用前
+3. **添加批次间延迟**: 批量处理时每批间隔2-3秒
+4. **改进429处理**: 等待2分钟，最多重试7次（独立计数）
+5. **创建全局速率限制器**: 新增`rate_limiter.py`工具类
+
+**Impact**:
+- 请求频率: 50 req/s → 3 req/s (降低94%)
+- 429错误: 频繁发生 → 几乎消除
+- 处理时间: 略微增加但更稳定可靠
+
+**Files Modified**:
+- `wos_standardizer_batch.py` (并发数、延迟、429处理)
+- `gemini_enricher_v2.py` (批次延迟、指数退避)
+- `enhanced_converter_batch_v2.py` (并发参数、批次延迟)
+- `rate_limiter.py` (新增)
+
+**Documentation**: See `API_RATE_LIMIT_FIX.md` for detailed analysis and recommendations.
+
+---
+
+### v4.5.1 - C1 Format & Institution Cleaning (2025-11-20)
+
+**Date**: 2025-11-20
+
+1. **AI Enrichment C1 Format Fix** ⭐ CRITICAL
+   - **Problem**: State and ZIP were merged (e.g., "FL 32804"), preventing country extraction
+   - **Fix**: State and ZIP now separate parts, country always last
+   - **Impact**: WOS format alignment now works correctly for AI-enriched records
+
+2. **Institution Cleaning Person Name Filter** ⭐ CRITICAL
+   - **Problem**: C3 field contained person names (e.g., "Smith, J", "Wang, L")
+   - **Fix**: Added regex filters to detect and remove person name patterns
+   - **Impact**: VOSviewer institution analysis now accurate, no person names in network
+
+3. **Plot Generation Confirmation** ✅
+   - **Status**: `generate_all_figures()` function exists and works
+   - **Note**: Requires `matplotlib` and `plot_publications_citations.py`
+
+**Recommendation**: Re-run workflow on existing projects to get corrected results.
+
+See `BUGFIX_v4.5.1.md` for detailed fix documentation.
 
 ## File Encoding Requirements
 

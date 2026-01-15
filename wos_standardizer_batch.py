@@ -128,11 +128,12 @@ class WOSStandardizerBatch:
     """WOS格式标准化器（批量并发版）"""
 
     def __init__(self, config: GeminiConfig, db_path: str = 'config/wos_standard_cache.json',
-                 max_workers: int = 50, batch_size: int = 100):
+                 max_workers: int = 5, batch_size: int = 20):
         self.config = config
         self.db = WOSStandardDatabase(db_path)
-        self.max_workers = max_workers  # 并发线程数
-        self.batch_size = batch_size    # 每批处理数量
+        self.max_workers = max_workers  # 并发线程数（降低到5，避免429错误）
+        self.batch_size = batch_size    # 每批处理数量（降低到20）
+        self.request_delay = 1.5  # 每次请求间隔（秒）
         self.stats = {
             'author_hits': 0,
             'author_misses': 0,
@@ -277,6 +278,10 @@ class WOSStandardizerBatch:
                 else:
                     results[country] = country
 
+            # 批次间延迟，避免429错误
+            if i + batch_request_size < len(countries):
+                time.sleep(2.0)
+
         return results
 
     def _batch_ai_standardize_journals(self, journals: List[str]) -> Dict[str, str]:
@@ -297,6 +302,10 @@ class WOSStandardizerBatch:
                     results[journal] = batch_results[journal]
                 else:
                     results[journal] = journal
+
+            # 批次间延迟，避免429错误
+            if i + batch_request_size < len(journals):
+                time.sleep(2.0)
 
         return results
 
@@ -470,11 +479,18 @@ Output ONLY the numbered list in UPPERCASE, no explanation:"""
         return {}
 
     def _call_gemini_api(self, prompt: str) -> Optional[str]:
-        """调用Gemini API"""
-        self.stats['api_calls'] += 1
+        """
+        调用Gemini API（改进的重试逻辑）
 
-        # 速率限制：60 RPM (每次请求间隔1秒)
-        time.sleep(1.0)
+        重试策略：
+        - 前5次：每次间隔5秒（快速重试）
+        - 后7次：每次间隔2分钟（慢速重试，针对429限流）
+        - 总共最多12次重试
+        """
+        # ✅ 速率限制：在API调用前延迟（避免429错误）
+        time.sleep(self.request_delay)
+
+        self.stats['api_calls'] += 1
 
         url = f"{self.config.api_url}/models/{self.config.model}:generateContent"
 
@@ -487,7 +503,10 @@ Output ONLY the numbered list in UPPERCASE, no explanation:"""
             }
         }
 
-        for attempt in range(self.config.max_retries):
+        max_retries = 12  # 总共最多重试12次
+        retry_count = 0
+
+        while retry_count <= max_retries:
             try:
                 response = requests.post(
                     url,
@@ -502,14 +521,72 @@ Output ONLY the numbered list in UPPERCASE, no explanation:"""
                     if 'candidates' in result and len(result['candidates']) > 0:
                         text = result['candidates'][0]['content']['parts'][0]['text']
                         return text.strip()
+                    else:
+                        logger.error(f"响应格式错误或无candidates")
+                        return None
 
-                if attempt < self.config.max_retries - 1:
-                    time.sleep(1.0)  # 重试延迟增加到1秒
+                # API返回错误，需要重试
+                retry_count += 1
+                if retry_count > max_retries:
+                    if response.status_code == 429:
+                        logger.error(f"✗ 429错误重试已达上限（{max_retries}次），放弃")
+                    else:
+                        logger.error(f"✗ API错误重试已达上限（{max_retries}次），放弃")
+                    return None
+
+                # 确定等待时间
+                if retry_count <= 5:
+                    # 前5次：每次间隔5秒
+                    wait_time = 5
+                    logger.warning(f"⚠️ API错误（{response.status_code}），等待{wait_time}秒后重试... (尝试 {retry_count}/{max_retries}，快速重试阶段)")
+                else:
+                    # 后7次：每次间隔2分钟（针对429限流）
+                    wait_time = 120
+                    logger.warning(f"⚠️ API错误（{response.status_code}），等待{wait_time}秒（2分钟）后重试... (尝试 {retry_count}/{max_retries}，慢速重试阶段)")
+
+                if response.status_code != 200:
+                    logger.error(f"API错误: {response.status_code} - {response.text[:200]}")
+
+                time.sleep(wait_time)
+                logger.info("继续重试...")
+                continue
+
+            except requests.exceptions.Timeout:
+                retry_count += 1
+                if retry_count > max_retries:
+                    logger.error(f"✗ 超时错误重试已达上限（{max_retries}次），放弃")
+                    return None
+
+                # 确定等待时间
+                if retry_count <= 5:
+                    wait_time = 5
+                    logger.warning(f"⚠️ API调用超时（{self.config.timeout}秒），等待{wait_time}秒后重试... (尝试 {retry_count}/{max_retries}，快速重试阶段)")
+                else:
+                    wait_time = 120
+                    logger.warning(f"⚠️ API调用超时（{self.config.timeout}秒），等待{wait_time}秒（2分钟）后重试... (尝试 {retry_count}/{max_retries}，慢速重试阶段)")
+
+                time.sleep(wait_time)
+                continue
 
             except Exception as e:
-                if attempt < self.config.max_retries - 1:
-                    time.sleep(1.0)
+                retry_count += 1
+                if retry_count > max_retries:
+                    logger.error(f"✗ API异常重试已达上限（{max_retries}次），放弃")
+                    return None
 
+                # 确定等待时间
+                if retry_count <= 5:
+                    wait_time = 5
+                    logger.warning(f"⚠️ API调用异常: {e}，等待{wait_time}秒后重试... (尝试 {retry_count}/{max_retries}，快速重试阶段)")
+                else:
+                    wait_time = 120
+                    logger.warning(f"⚠️ API调用异常: {e}，等待{wait_time}秒（2分钟）后重试... (尝试 {retry_count}/{max_retries}，慢速重试阶段)")
+
+                time.sleep(wait_time)
+                continue
+
+        # 不应该到达这里
+        logger.error("✗ API调用失败，已达最大重试次数")
         return None
 
     def get_statistics(self) -> Dict:
@@ -547,8 +624,8 @@ def main():
         model='gemini-2.5-flash-lite'
     )
 
-    # 创建批量标准化器（50个并发线程）
-    standardizer = WOSStandardizerBatch(config, max_workers=50, batch_size=100)
+    # 创建批量标准化器（5个并发线程，避免429错误）
+    standardizer = WOSStandardizerBatch(config, max_workers=5, batch_size=20)
 
     # 测试数据
     test_authors = [

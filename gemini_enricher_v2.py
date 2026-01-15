@@ -223,7 +223,7 @@ class GeminiEnricherV2:
         batch_size = 10
         for i in range(0, len(to_enrich), batch_size):
             batch = to_enrich[i:i + batch_size]
-            logger.info(f"⚡ 批量AI补全: {len(batch)} 个机构")
+            logger.info(f"⚡ 批量AI补全: {len(batch)} 个机构 (批次 {i//batch_size + 1}/{(len(to_enrich)-1)//batch_size + 1})")
 
             batch_results = self._call_ai_batch(batch)
 
@@ -234,6 +234,11 @@ class GeminiEnricherV2:
                     self.db.add_institution(institution_name, city, country, result)
                     logger.info(f"✓ {institution_name} (置信度: {result.get('confidence', 0):.2f})")
                 results[inst_tuple] = result
+
+            # 批次间延迟，避免429错误
+            if i + batch_size < len(to_enrich):
+                logger.info(f"⏸️  批次间延迟2秒...")
+                time.sleep(2.0)
 
         return results
 
@@ -283,7 +288,7 @@ class GeminiEnricherV2:
         existing_info: Optional[Dict] = None
     ) -> Optional[Dict]:
         """
-        调用AI（带重试机制）
+        调用AI（简化版，重试逻辑在 _call_gemini_api 中）
 
         Args:
             institution_name: 机构名称
@@ -294,31 +299,25 @@ class GeminiEnricherV2:
         Returns:
             AI补全结果
         """
-        for attempt in range(1, self.config.max_retries + 1):
-            try:
-                # 构建提示词
-                prompt = self._build_prompt(institution_name, city, country, existing_info)
+        try:
+            # 构建提示词
+            prompt = self._build_prompt(institution_name, city, country, existing_info)
 
-                # 调用API
-                response = self._call_gemini_api(prompt)
+            # 调用API（内置重试逻辑：5秒×5次 + 2分钟×7次）
+            response = self._call_gemini_api(prompt)
 
-                if response:
-                    # 解析响应
-                    result = self._parse_response(response)
-                    if result:
-                        return result
-
-                # 如果失败，记录并重试
-                if attempt < self.config.max_retries:
-                    logger.warning(f"⚠️ 尝试 {attempt}/{self.config.max_retries} 失败，{self.config.retry_delay}秒后重试...")
-                    time.sleep(self.config.retry_delay)
+            if response:
+                # 解析响应
+                result = self._parse_response(response)
+                if result:
+                    return result
                 else:
-                    logger.error(f"✗ 所有重试均失败: {institution_name}")
+                    logger.error(f"✗ 解析响应失败: {institution_name}")
+            else:
+                logger.error(f"✗ API调用失败（所有重试均失败）: {institution_name}")
 
-            except Exception as e:
-                logger.error(f"✗ 调用AI时出错: {e}")
-                if attempt < self.config.max_retries:
-                    time.sleep(self.config.retry_delay)
+        except Exception as e:
+            logger.error(f"✗ 调用AI时出错: {e}")
 
         return None
 
@@ -444,7 +443,16 @@ Now process the input above and return ONLY the JSON output:"""
         return prompt
 
     def _call_gemini_api(self, prompt: str) -> Optional[str]:
-        """调用Gemini API（带配额用尽自动重试）"""
+        """
+        调用Gemini API（改进的重试逻辑）
+
+        重试策略：
+        - 前5次：每次间隔5秒（快速重试）
+        - 后7次：每次间隔2分钟（慢速重试，针对429限流）
+        - 总共最多12次重试
+        """
+        # ✅ 速率限制：在API调用前延迟（避免429错误）
+        time.sleep(1.5)
 
         url = f"{self.api_url}/models/{self.model}:generateContent"
 
@@ -464,9 +472,10 @@ Now process the input above and return ONLY the JSON output:"""
             }
         }
 
-        # 添加循环支持重试
-        max_quota_retries = 3  # 最多重试3次
-        for retry_count in range(max_quota_retries):
+        max_retries = 12  # 总共最多重试12次
+        retry_count = 0
+
+        while retry_count <= max_retries:
             try:
                 response = requests.post(
                     url,
@@ -491,24 +500,69 @@ Now process the input above and return ONLY the JSON output:"""
                     else:
                         logger.error(f"响应中没有candidates: {result}")
                         return None
-                elif response.status_code == 429:
-                    logger.warning(f"⚠️ API配额用尽（429错误），等待3分钟后重试... (尝试 {retry_count + 1}/{max_quota_retries})")
-                    time.sleep(180)  # 等待3分钟
-                    logger.info("继续重试...")
-                    continue  # 重试当前请求
-                else:
-                    logger.error(f"Gemini API错误: {response.status_code} - {response.text}")
+
+                # API返回错误，需要重试
+                retry_count += 1
+                if retry_count > max_retries:
+                    if response.status_code == 429:
+                        logger.error(f"✗ 429错误重试已达上限（{max_retries}次），放弃")
+                    else:
+                        logger.error(f"✗ API错误重试已达上限（{max_retries}次），放弃")
                     return None
 
-            except requests.exceptions.Timeout:
-                logger.error(f"API调用超时（{self.config.timeout}秒）")
-                raise
-            except Exception as e:
-                logger.error(f"调用Gemini API失败: {e}")
-                raise
+                # 确定等待时间
+                if retry_count <= 5:
+                    # 前5次：每次间隔5秒
+                    wait_time = 5
+                    logger.warning(f"⚠️ API错误（{response.status_code}），等待{wait_time}秒后重试... (尝试 {retry_count}/{max_retries}，快速重试阶段)")
+                else:
+                    # 后7次：每次间隔2分钟（针对429限流）
+                    wait_time = 120
+                    logger.warning(f"⚠️ API错误（{response.status_code}），等待{wait_time}秒（2分钟）后重试... (尝试 {retry_count}/{max_retries}，慢速重试阶段)")
 
-        # 如果所有重试都失败
-        logger.error(f"API配额用尽，已重试{max_quota_retries}次，放弃")
+                if response.status_code != 200:
+                    logger.error(f"Gemini API错误: {response.status_code} - {response.text[:200]}")
+
+                time.sleep(wait_time)
+                logger.info("继续重试...")
+                continue
+
+            except requests.exceptions.Timeout:
+                retry_count += 1
+                if retry_count > max_retries:
+                    logger.error(f"✗ 超时错误重试已达上限（{max_retries}次），放弃")
+                    return None
+
+                # 确定等待时间
+                if retry_count <= 5:
+                    wait_time = 5
+                    logger.warning(f"⚠️ API调用超时（{self.config.timeout}秒），等待{wait_time}秒后重试... (尝试 {retry_count}/{max_retries}，快速重试阶段)")
+                else:
+                    wait_time = 120
+                    logger.warning(f"⚠️ API调用超时（{self.config.timeout}秒），等待{wait_time}秒（2分钟）后重试... (尝试 {retry_count}/{max_retries}，慢速重试阶段)")
+
+                time.sleep(wait_time)
+                continue
+
+            except Exception as e:
+                retry_count += 1
+                if retry_count > max_retries:
+                    logger.error(f"✗ API异常重试已达上限（{max_retries}次），放弃")
+                    return None
+
+                # 确定等待时间
+                if retry_count <= 5:
+                    wait_time = 5
+                    logger.warning(f"⚠️ 调用Gemini API失败: {e}，等待{wait_time}秒后重试... (尝试 {retry_count}/{max_retries}，快速重试阶段)")
+                else:
+                    wait_time = 120
+                    logger.warning(f"⚠️ 调用Gemini API失败: {e}，等待{wait_time}秒（2分钟）后重试... (尝试 {retry_count}/{max_retries}，慢速重试阶段)")
+
+                time.sleep(wait_time)
+                continue
+
+        # 不应该到达这里
+        logger.error("✗ API调用失败，已达最大重试次数")
         return None
 
     def _parse_response(self, response: str) -> Optional[Dict]:

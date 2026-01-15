@@ -2,11 +2,11 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-4.2.0-green.svg)](https://github.com/LeoMengTCM/LM_Bibliometrics/releases/tag/v4.2.0)
+[![Version](https://img.shields.io/badge/version-5.0.0-green.svg)](https://github.com/LeoMengTCM/LM_Bibliometrics/releases/tag/v5.0.0)
 
 一套专业的文献计量学数据处理工具，用于整合Scopus和Web of Science（WOS）数据库的文献数据，完美支持CiteSpace、VOSviewer、Bibliometrix等主流分析工具。
 
-> **🔥 v4.2.0 作者数据库系统**（2025-11-12）：
+> **🔥 v5.0.0 稳定版发布**（2026-01-15）：
 > - 🎯 **作者数据库** - 从WOS文件构建标准化作者数据库
 > - ✅ **自动集成** - Scopus转换时优先使用WOS标准作者名
 > - 📊 **自动可视化** - 文档类型分布图自动生成（PNG + TIFF）
@@ -345,6 +345,16 @@ python3 run_ai_workflow.py --data-dir "/path/to/data" --log-level DEBUG
 
 ## 📝 更新日志
 
+### v5.0.0 (2026-01-15) - 稳定版发布 🎉
+- ✅ **API速率限制修复**：彻底解决429错误，并发从50降到5，请求频率降低94%
+- ✅ **C1格式修复**：AI补全后国家始终在最后独立位置
+- ✅ **C3人名过滤**：移除机构字段中的人名（如"Smith, J"）
+- ✅ **GUI显示修复**：窗口自适应、滚动支持、绘图时机优化
+- ✅ **WOS格式对齐**：Scopus独有记录自动对齐WOS标准
+- ✅ **年份优先过滤**：在源头过滤异常年份（Early Access、历史引用）
+- 🎨 **图形界面**：现代化GUI界面，一键式操作
+- 📦 **项目成熟**：代码无遗留TODO，功能完整稳定
+
 ### v4.1.0 (2025-11-12)
 - ✨ 新增自动可视化功能（文档类型分布图）
 - ✨ 新增项目文件夹结构自动创建
@@ -402,8 +412,8 @@ MIT License - 可自由使用、修改、分发
 
 - **作者**: Meng Linghan
 - **开发工具**: Claude Code
-- **版本**: v4.1.0 (Visualization & Project Management)
-- **日期**: 2025-11-12
+- **版本**: v5.0.0 (Stable Release)
+- **日期**: 2026-01-15
 - **GitHub**: [LM_Bibliometrics](https://github.com/LeoMengTCM/LM_Bibliometrics)
 
 ---

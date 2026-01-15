@@ -16,6 +16,7 @@
 
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 from scopus_to_wos_converter import ScopusToWosConverter
@@ -34,7 +35,7 @@ class EnhancedConverterBatchV2:
     """增强版转换器（批量并发版 v2.0 - 只标准化国家和期刊）"""
 
     def __init__(self, input_file: str, output_file: str, enable_standardization: bool = True,
-                 max_workers: int = 20, batch_size: int = 50):
+                 max_workers: int = 5, batch_size: int = 20):
         self.input_file = input_file
         self.output_file = output_file
         self.enable_standardization = enable_standardization
@@ -42,7 +43,7 @@ class EnhancedConverterBatchV2:
         # 创建基础转换器
         self.converter = ScopusToWosConverter(input_file, output_file)
 
-        # 创建WOS标准化器（批量并发版）
+        # 创建WOS标准化器（批量并发版，降低并发数避免429错误）
         if enable_standardization:
             config = GeminiConfig.from_params(
                 api_key='sk-leomeng1997',
@@ -136,6 +137,11 @@ class EnhancedConverterBatchV2:
         # 批量标准化国家
         logger.info("批量标准化国家名...")
         country_mapping = self.standardizer.standardize_countries_batch(unique_countries)
+
+        # 批次间延迟，避免429错误
+        if unique_journals:
+            logger.info("⏸️  等待3秒后继续...")
+            time.sleep(3.0)
 
         # 批量标准化期刊
         logger.info("批量标准化期刊名...")
@@ -302,13 +308,13 @@ def main():
     input_file = sys.argv[1]
     output_file = sys.argv[2]
 
-    # 创建转换器（20个并发线程，每批50个）
+    # 创建转换器（5个并发线程，每批20个，避免429错误）
     converter = EnhancedConverterBatchV2(
         input_file,
         output_file,
         enable_standardization=True,
-        max_workers=20,
-        batch_size=50
+        max_workers=5,
+        batch_size=20
     )
 
     # 执行转换

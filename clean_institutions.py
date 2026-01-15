@@ -105,6 +105,15 @@ class InstitutionCleaner:
         if re.match(r'^[\d\s\.\-,;]+$', inst_lower):
             return True
 
+        # ⚠️ 关键修复：过滤人名格式
+        # 人名格式: "Lastname, F" 或 "Lastname, FM" (姓 + 逗号 + 1-2个大写字母)
+        if re.match(r'^[A-Z][a-z]+,\s*[A-Z]{1,2}$', institution.strip()):
+            return True
+
+        # 人名格式: "Lastname F" 或 "Lastname FM" (姓 + 空格 + 1-2个大写字母)
+        if re.match(r'^[A-Z][a-z]+\s+[A-Z]{1,2}$', institution.strip()):
+            return True
+
         return False
 
     def is_department(self, institution: str) -> bool:

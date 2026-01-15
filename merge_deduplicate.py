@@ -189,6 +189,276 @@ class RecordMatcher:
             return True
 
 
+class WOSStandardExtractor:
+    """从WOS记录中提取标准格式"""
+
+    def __init__(self):
+        self.institutions = {}  # {lowercase: original_format}
+        self.journals = {}      # {lowercase: original_format}
+        self.countries = {}     # {lowercase: original_format}
+        self.authors = {}       # {lowercase: original_format}
+
+        # 常见WOS国家名称参考列表（用于辅助验证）
+        self.common_wos_countries = {
+            'usa', 'england', 'peoples r china', 'germany', 'france', 'italy',
+            'spain', 'canada', 'australia', 'japan', 'south korea', 'brazil',
+            'india', 'russia', 'netherlands', 'switzerland', 'sweden', 'belgium',
+            'austria', 'denmark', 'norway', 'finland', 'poland', 'portugal',
+            'greece', 'czech republic', 'hungary', 'ireland', 'israel', 'turkey',
+            'turkiye', 'new zealand', 'singapore', 'taiwan', 'thailand', 'malaysia',
+            'indonesia', 'philippines', 'vietnam', 'mexico', 'argentina', 'chile',
+            'colombia', 'egypt', 'south africa', 'saudi arabia', 'united arab emirates',
+            'iran', 'pakistan', 'bangladesh', 'nigeria', 'kenya', 'scotland',
+            'wales', 'northern ireland', 'north ireland'
+        }
+
+    def _is_valid_country(self, text: str) -> bool:
+        """验证文本是否像一个国家名称"""
+        if not text or len(text) < 3:  # 太短
+            return False
+
+        text_stripped = text.strip()
+        text_lower = text_stripped.lower()
+
+        # ========== 快速通过：在常见WOS国家列表中 ==========
+        if text_lower in self.common_wos_countries:
+            return True
+
+        # ========== 严格排除：明显不是国家的特征 ==========
+
+        # 1. 长度检查
+        if len(text_stripped) > 50:  # 太长
+            return False
+
+        # 2. 不应该包含方括号（那是作者标记）
+        if '[' in text_stripped or ']' in text_stripped:
+            return False
+
+        # 3. 不应该包含数字（国家名一般不含数字，但邮编会有）
+        if any(char.isdigit() for char in text_stripped):
+            return False
+
+        # 4. 特殊符号检查（只允许字母、空格、连字符、撇号、&、点）
+        allowed_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ -\'&.')
+        if not all(c in allowed_chars or c.isspace() for c in text_stripped):
+            return False
+
+        # 5. 首字母应该大写（国家名都是首字母大写）
+        if not text_stripped[0].isupper():
+            return False
+
+        # ========== 关键：排除人名格式 ==========
+
+        # 6. 排除 "Name M" 或 "Name A" 格式（典型的人名：姓 + 单个字母）
+        words = text_stripped.split()
+        if len(words) == 2:
+            # 检查最后一个词是否是单个大写字母（中间名首字母）
+            last_word = words[-1].strip('.,')
+            if len(last_word) == 1 and last_word.isupper():
+                return False  # 这是人名！
+
+        # 7. 排除 "Name M." 格式（带点的中间名首字母）
+        if len(words) == 2 and words[-1].endswith('.') and len(words[-1]) == 2:
+            return False  # 这是人名！
+
+        # 8. 排除州名缩写格式 "AL USA", "CA USA" 等
+        if len(words) == 2:
+            first_word = words[0].strip('.,')
+            # 如果第一个词是2个大写字母（州名缩写）
+            if len(first_word) == 2 and first_word.isupper() and words[1].upper() in ['USA']:
+                return False  # 这是州名+国家
+
+        # ========== 排除常见的非国家词 ==========
+
+        invalid_words = [
+            'dept', 'department', 'division', 'center', 'centre', 'lab', 'laboratory',
+            'institute', 'university', 'college', 'hospital', 'school', 'faculty',
+            'street', 'road', 'avenue', 'boulevard', 'zip', 'email', 'tel', 'fax',
+            'phone', 'building', 'floor', 'room', 'suite', 'box', 'district'
+        ]
+        for word in invalid_words:
+            if word in text_lower:
+                return False
+
+        # ========== 积极特征：更可能是国家 ==========
+
+        # 9. 包含 " R " 或 " & " (如 Peoples R China, Trinidad & Tobago)
+        if ' r ' in text_lower or text_lower.endswith(' r') or ' & ' in text_lower:
+            return True
+
+        # 10. 多个单词的名称（国家名通常不是单个词）
+        # 但要排除只有2个词且最后一个是单字母的情况（已在上面排除）
+        if len(words) >= 2:
+            # 所有单词都不是单个字母
+            all_words_valid = all(len(w.strip('.,')) > 1 for w in words)
+            if all_words_valid:
+                return True
+
+        # 11. 单个词但长度适中（如 Germany, France, Italy）
+        if len(words) == 1 and 4 <= len(text_stripped) <= 20:
+            # 排除常见的城市名（这个比较难，暂时允许通过）
+            return True
+
+        # 默认不通过
+        return False
+
+    def extract_from_wos_records(self, wos_records: List[Dict]):
+        """从WOS记录中提取所有标准格式"""
+        logger.info("从WOS记录中提取标准格式...")
+
+        for record in wos_records:
+            # 提取机构名称（C3字段）
+            if 'C3' in record:
+                institutions = [inst.strip() for inst in record['C3'].split(';') if inst.strip()]
+                for inst in institutions:
+                    inst_lower = inst.lower()
+                    if inst_lower not in self.institutions:
+                        self.institutions[inst_lower] = inst
+
+            # 提取期刊名称（SO字段）
+            if 'SO' in record:
+                journal = record['SO'].strip()
+                journal_lower = journal.lower()
+                if journal_lower not in self.journals:
+                    self.journals[journal_lower] = journal
+
+            # 提取国家名称（从C1字段）
+            if 'C1' in record:
+                # C1格式: [Author] Institution, City, Country.
+                # 注意：必须以句点结尾，且国家名是最后一个逗号后、句点前的内容
+                lines = record['C1'].split('\n')
+                for line in lines:
+                    # 必须包含句点（标准WOS格式以句点结尾）
+                    if '.' in line and ',' in line:
+                        # 提取句点前的内容
+                        before_period = line.split('.')[0]
+                        # 再按逗号分割
+                        parts = before_period.split(',')
+                        if len(parts) >= 2:  # 至少有机构和国家
+                            country = parts[-1].strip()
+
+                            # 验证是否像一个国家名称
+                            if self._is_valid_country(country):
+                                country_lower = country.lower()
+                                if country_lower not in self.countries:
+                                    self.countries[country_lower] = country
+
+            # 提取作者名称（AU字段）
+            if 'AU' in record:
+                authors = record['AU'].split('\n')
+                for author in authors:
+                    author = author.strip()
+                    if author:
+                        author_lower = author.lower()
+                        if author_lower not in self.authors:
+                            self.authors[author_lower] = author
+
+        logger.info(f"✓ 提取完成：")
+        logger.info(f"  - 机构: {len(self.institutions)} 个")
+        logger.info(f"  - 期刊: {len(self.journals)} 个")
+        logger.info(f"  - 国家: {len(self.countries)} 个")
+        logger.info(f"  - 作者: {len(self.authors)} 个")
+
+        # 显示提取到的国家列表（前20个）
+        if self.countries:
+            logger.info(f"  提取到的国家（前20个）:")
+            for i, country in enumerate(sorted(self.countries.values())[:20], 1):
+                logger.info(f"    {i}. {country}")
+            if len(self.countries) > 20:
+                logger.info(f"    ... 还有 {len(self.countries) - 20} 个国家")
+
+    def standardize_scopus_record(self, scopus_record: Dict) -> Dict:
+        """将Scopus记录标准化为WOS格式"""
+        standardized = scopus_record.copy()
+
+        # 1. 标准化机构名称（C3字段）
+        if 'C3' in standardized:
+            institutions = [inst.strip() for inst in standardized['C3'].split(';') if inst.strip()]
+            standardized_institutions = []
+
+            for inst in institutions:
+                inst_lower = inst.lower()
+                # 如果在WOS中出现过，使用WOS的格式
+                if inst_lower in self.institutions:
+                    standardized_institutions.append(self.institutions[inst_lower])
+                else:
+                    standardized_institutions.append(inst)
+
+            standardized['C3'] = '; '.join(standardized_institutions)
+
+        # 2. 标准化期刊名称（SO字段）
+        if 'SO' in standardized:
+            journal = standardized['SO'].strip()
+            journal_lower = journal.lower()
+            if journal_lower in self.journals:
+                standardized['SO'] = self.journals[journal_lower]
+
+        # 3. 标准化国家名称（C1字段）
+        if 'C1' in standardized:
+            lines = standardized['C1'].split('\n')
+            standardized_lines = []
+
+            for line in lines:
+                # 必须包含句点和逗号（标准WOS格式）
+                if '.' in line and ',' in line:
+                    # 提取句点前的内容
+                    before_period = line.split('.')[0]
+                    after_period = '.'.join(line.split('.')[1:])  # 保留句点后的内容
+
+                    # 按逗号分割
+                    parts = before_period.split(',')
+                    if len(parts) >= 2:
+                        country = parts[-1].strip()
+
+                        # 如果这是一个有效的国家名且在WOS中出现过，使用WOS的格式
+                        if self._is_valid_country(country):
+                            country_lower = country.lower()
+                            if country_lower in self.countries:
+                                # 替换为WOS标准格式
+                                parts[-1] = ' ' + self.countries[country_lower]
+                                standardized_line = ','.join(parts) + '.'
+                                if after_period:
+                                    standardized_line += after_period
+                                standardized_lines.append(standardized_line)
+                            else:
+                                standardized_lines.append(line)
+                        else:
+                            # 不是有效的国家名，保持原样
+                            standardized_lines.append(line)
+                    else:
+                        standardized_lines.append(line)
+                else:
+                    standardized_lines.append(line)
+
+            standardized['C1'] = '\n'.join(standardized_lines)
+
+        # 4. 标准化作者名称（AU字段）
+        if 'AU' in standardized:
+            authors = standardized['AU'].split('\n')
+            standardized_authors = []
+
+            for author in authors:
+                author = author.strip()
+                if author:
+                    author_lower = author.lower()
+                    # 如果在WOS中出现过，使用WOS的格式
+                    if author_lower in self.authors:
+                        standardized_authors.append(self.authors[author_lower])
+                    else:
+                        standardized_authors.append(author)
+
+            standardized['AU'] = '\n'.join(standardized_authors)
+
+            # AF字段（全名）也需要对齐
+            if 'AF' in standardized:
+                af_authors = standardized['AF'].split('\n')
+                if len(af_authors) == len(standardized_authors):
+                    # 保持AF和AU的顺序一致
+                    standardized['AF'] = '\n'.join(af_authors)
+
+        return standardized
+
+
 class RecordMerger:
     """记录合并器（将Scopus信息补充到WOS）"""
 
@@ -214,10 +484,21 @@ class RecordMerger:
             merged['Z9'] = str(tc_scopus)
 
         # 2. 补充缺失字段（从Scopus）
+        # 注意：C1和C3（机构信息）必须优先使用WOS的，绝不从Scopus补充！
         supplement_fields = ['AB', 'LA', 'DT', 'PU', 'SN', 'J9', 'JI', 'PM', 'DI']
         for field in supplement_fields:
             if not merged.get(field) and scopus_record.get(field):
                 merged[field] = scopus_record[field]
+
+        # 3. 机构信息（C1, C3）严格以WOS为准，只在WOS完全缺失时才补充Scopus
+        # 这确保机构名称格式始终使用WOS标准
+        if not merged.get('C1') and scopus_record.get('C1'):
+            merged['C1'] = scopus_record['C1']
+        if not merged.get('C3') and scopus_record.get('C3'):
+            merged['C3'] = scopus_record['C3']
+
+        # 4. 添加来源标记（用于清洗时识别）
+        merged['_SOURCE'] = 'WOS'  # 标记此记录以WOS为基础
 
         return merged
 
@@ -250,6 +531,7 @@ class MergeDeduplicateTool:
         self.parser = WOSRecordParser()
         self.matcher = RecordMatcher()
         self.merger = RecordMerger()
+        self.wos_standard_extractor = WOSStandardExtractor()  # WOS标准提取器
 
         self.wos_records = []
         self.scopus_records = []
@@ -262,7 +544,8 @@ class MergeDeduplicateTool:
             'scopus_unique': 0,
             'final_count': 0,
             'duplicate_details': [],
-            'yearly_stats': {}  # {year: {'documents': count, 'citations': total}}
+            'yearly_stats': {},  # {year: {'documents': count, 'citations': total}}
+            'standardized_count': 0  # 标准化的Scopus记录数
         }
 
         logger.info(f"初始化合并工具 - WOS: {wos_file}, Scopus: {scopus_file}")
@@ -278,7 +561,7 @@ class MergeDeduplicateTool:
         logger.info("")
 
         # 步骤1：读取文件
-        logger.info("步骤 1/4: 读取文件...")
+        logger.info("步骤 1/5: 读取文件...")
         self.wos_records = self.parser.parse_wos_file(self.wos_file)
         self.scopus_records = self.parser.parse_wos_file(self.scopus_file)
 
@@ -289,8 +572,13 @@ class MergeDeduplicateTool:
         logger.info(f"  读取Scopus记录: {self.stats['scopus_count']} 条")
         logger.info("")
 
-        # 步骤2：识别Scopus中与WOS重复的记录
-        logger.info("步骤 2/4: 识别WOS-Scopus重复记录...")
+        # 步骤2：从WOS记录中提取标准格式
+        logger.info("步骤 2/5: 从WOS记录中提取标准格式（机构、期刊、国家、作者）...")
+        self.wos_standard_extractor.extract_from_wos_records(self.wos_records)
+        logger.info("")
+
+        # 步骤3：识别Scopus中与WOS重复的记录
+        logger.info("步骤 3/5: 识别WOS-Scopus重复记录...")
         wos_scopus_pairs = self.find_wos_scopus_duplicates()
 
         self.stats['scopus_duplicates'] = len(wos_scopus_pairs)
@@ -300,18 +588,19 @@ class MergeDeduplicateTool:
         logger.info(f"  Scopus独有记录: {self.stats['scopus_unique']} 条")
         logger.info("")
 
-        # 步骤3：合并记录（WOS优先，Scopus补充）
-        logger.info("步骤 3/4: 合并记录（WOS优先，Scopus补充信息）...")
+        # 步骤4：合并记录（WOS优先，Scopus独有记录对齐WOS标准）
+        logger.info("步骤 4/5: 合并记录（WOS优先，Scopus独有记录对齐WOS标准）...")
         self.merge_records(wos_scopus_pairs)
 
         self.stats['final_count'] = len(self.final_records)
         logger.info(f"  最终记录数: {self.stats['final_count']} 条")
         logger.info(f"    - WOS记录（合并后）: {self.stats['wos_count']} 条")
         logger.info(f"    - Scopus独有记录: {self.stats['scopus_unique']} 条")
+        logger.info(f"    - Scopus记录标准化: {self.stats['standardized_count']} 条")
         logger.info("")
 
-        # 步骤4：写入文件
-        logger.info("步骤 4/4: 写入输出文件...")
+        # 步骤5：写入文件
+        logger.info("步骤 5/5: 写入输出文件...")
         self.write_output()
         logger.info(f"  输出文件已保存: {self.output_file}")
         logger.info("")
@@ -361,7 +650,7 @@ class MergeDeduplicateTool:
 
         策略：
         1. 将WOS-Scopus对合并（Scopus补充WOS）
-        2. 添加Scopus独有记录
+        2. 添加Scopus独有记录，并对齐WOS标准格式
         """
         scopus_used = set(scopus_idx for _, scopus_idx in wos_scopus_pairs)
 
@@ -375,17 +664,22 @@ class MergeDeduplicateTool:
                     break
 
             if scopus_record:
-                # 合并
+                # 合并（以WOS为准）
                 merged = self.merger.merge_scopus_to_wos(wos_record, scopus_record)
                 self.final_records.append(merged)
             else:
-                # WOS独有
+                # WOS独有记录，标记来源
+                wos_record['_SOURCE'] = 'WOS'
                 self.final_records.append(wos_record)
 
-        # 2. 添加Scopus独有记录
+        # 2. 添加Scopus独有记录（对齐WOS标准格式）
         for scopus_idx, scopus_record in enumerate(self.scopus_records):
             if scopus_idx not in scopus_used:
-                self.final_records.append(scopus_record)
+                # ⭐ 关键：对齐WOS标准格式（机构、期刊、国家、作者）
+                standardized = self.wos_standard_extractor.standardize_scopus_record(scopus_record)
+                standardized['_SOURCE'] = 'SCOPUS'
+                self.final_records.append(standardized)
+                self.stats['standardized_count'] += 1
 
     def write_output(self):
         """写入合并后的WOS格式文件"""
@@ -483,6 +777,8 @@ class MergeDeduplicateTool:
         logger.info(f"")
         logger.info(f"WOS-Scopus重复记录:     {self.stats['scopus_duplicates']} 条（已从Scopus删除）")
         logger.info(f"Scopus独有记录:         {self.stats['scopus_unique']} 条（已保留）")
+        logger.info(f"  ⭐ Scopus独有记录标准化: {self.stats['standardized_count']} 条")
+        logger.info(f"     （机构、期刊、国家、作者已对齐WOS格式）")
         logger.info(f"")
         logger.info(f"最终记录数:             {self.stats['final_count']} 条")
         logger.info(f"  = WOS记录（含补充）:  {self.stats['wos_count']} 条")
@@ -529,6 +825,11 @@ class MergeDeduplicateTool:
         logger.info("- Scopus信息用于补充WOS缺失字段")
         logger.info("- 被引次数（TC）取两者最大值")
         logger.info("- Scopus独有记录（无WOS对应）已全部保留")
+        logger.info("- ⭐ Scopus独有记录已对齐WOS标准格式：")
+        logger.info("    · 机构名称：如果在WOS中出现过，使用WOS格式")
+        logger.info("    · 期刊名称：如果在WOS中出现过，使用WOS格式")
+        logger.info("    · 国家名称：如果在WOS中出现过，使用WOS格式")
+        logger.info("    · 作者名称：如果在WOS中出现过，使用WOS格式")
         logger.info("=" * 60)
         logger.info("合并去重完成！")
         logger.info("=" * 60)
@@ -544,9 +845,22 @@ class MergeDeduplicateTool:
             f.write(f"Scopus原始记录数:       {self.stats['scopus_count']} 条\n\n")
 
             f.write(f"WOS-Scopus重复记录:     {self.stats['scopus_duplicates']} 条\n")
-            f.write(f"Scopus独有记录:         {self.stats['scopus_unique']} 条\n\n")
+            f.write(f"Scopus独有记录:         {self.stats['scopus_unique']} 条\n")
+            f.write(f"  ⭐ Scopus独有记录标准化: {self.stats['standardized_count']} 条\n")
+            f.write(f"     （机构、期刊、国家、作者已对齐WOS格式）\n\n")
 
             f.write(f"最终记录数:             {self.stats['final_count']} 条\n\n")
+
+            f.write("=" * 60 + "\n")
+            f.write("WOS格式对齐说明\n")
+            f.write("=" * 60 + "\n")
+            f.write("Scopus独有记录已自动对齐WOS标准格式：\n")
+            f.write("- 机构名称（C3字段）：如果在WOS中出现过，使用WOS格式\n")
+            f.write("- 期刊名称（SO字段）：如果在WOS中出现过，使用WOS格式\n")
+            f.write("- 国家名称（C1字段）：如果在WOS中出现过，使用WOS格式\n")
+            f.write("- 作者名称（AU字段）：如果在WOS中出现过，使用WOS格式\n\n")
+
+            f.write("这确保了所有记录的格式一致性，提高了数据质量和分析准确性。\n\n")
 
             if self.stats['duplicate_details']:
                 f.write("WOS-Scopus重复记录详情:\n")
