@@ -1,29 +1,29 @@
-# Changelog
+# 更新日志
 
-All notable changes to this project will be documented in this file.
+本项目的所有重要更改都将记录在此文件中。
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
+并且本项目遵循 [语义化版本控制](https://semver.org/lang/zh-CN/)。
 
 ---
 
 ## [5.1.0] - 2026-02-01
 
-### 🏗️ Architecture Refactoring
-- **Modular Design**: Refactored project into a `src.bibliometrics` Python package structure with sub-modules (`converters`, `standardizers`, `filters`, `pipeline`, `analysis`).
-- **Clean Root**: Moved utility scripts to `archive/` and documentation to `docs/`. Root directory now only contains essential entry points.
-- **Normalized Imports**: Adopted relative imports across the package for better maintainability.
+### 🏗️ 架构重构
+- **模块化设计**: 将项目重构为 `src.bibliometrics` Python 包结构，包含 `converters`（转换器）、`standardizers`（标准化器）、`filters`（过滤器）、`pipeline`（流水线）、`analysis`（分析）等子模块。
+- **清理根目录**: 将所有辅助脚本移至 `archive/`，文档移至 `docs/`，根目录仅保留核心入口文件。
+- **规范化导入**: 全面采用相对路径导入，提高代码的可维护性和可移植性。
 
-### 🛡️ Privacy & Security
-- **Sensitive Data Removal**: Scanned and removed personal paths, API key placeholders, and specific project names from codebase and documentation.
-- **Security Config**: Enhanced `.gitignore` to prevent accidental commit of sensitive configuration files.
+### 🛡️ 隐私与安全
+- **敏感信息移除**: 全面扫描并移除代码和文档中的个人路径、API 密钥占位符及特定项目名称。
+- **安全配置**: 优化 `.gitignore` 规则，确保敏感配置文件不会被误提交。
 
-### 🔄 Project Retitling
-- **Official Warning**: Renamed project to **"Bibliometric Data Consolidation Tool"**.
+### 🔄 项目更名
+- **正式更名**: 项目名称变更为 **"Bibliometric Data Consolidation Tool"**。
 
-### ⚡ Other Improvements
-- **Documentation**: Updated `README.md` and `QUICK_START.md` to reflect new architecture and usage.
-- **CLI Tool**: Added `scripts/run_workflow.py` as the new command-line entry point.
+### ⚡ 其他优化
+- **文档更新**: 更新 `README.md` 和 `QUICK_START.md` 以反映新的架构和使用方法。
+- **CLI 工具**: 新增 `scripts/run_workflow.py` 作为新的命令行入口。
 
 ---
 

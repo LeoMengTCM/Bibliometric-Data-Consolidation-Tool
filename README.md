@@ -4,7 +4,7 @@
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
 [![Version](https://img.shields.io/badge/version-5.1.0-green.svg)](https://github.com/LeoMengTCM/LM_Bibliometrics/releases/tag/v5.1.0)
 
-一套专业的文献计量学数据处理工具，用于整合Scopus和Web of Science（WOS）数据库的文献数据，完美支持CiteSpace、VOSviewer、Bibliometrix等主流分析工具。
+一套专业的文献计量学数据处理工具，用于整合 Scopus 和 Web of Science (WOS) 数据库的文献数据，完美支持 CiteSpace、VOSviewer、Bibliometrix 等主流分析工具。
 
 > **🔥 v5.1.0 稳定版发布**（2026-02-01）：
 > - 🏗️ **架构重构** - 采用模块化 Python 包结构 (`src/bibliometrics`)
