@@ -16,7 +16,7 @@
 作者：Meng Linghan
 开发工具：Claude Code
 日期：2026-01-15
-版本：v5.0.0 (Stable Release)
+版本：v5.1.0 (Stable Release)
 """
 
 import os

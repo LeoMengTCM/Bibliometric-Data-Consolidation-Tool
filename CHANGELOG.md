@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.1.0] - 2026-02-01
+
+### 🏗️ Architecture Refactoring
+- **Modular Design**: Refactored project into a `src.bibliometrics` Python package structure with sub-modules (`converters`, `standardizers`, `filters`, `pipeline`, `analysis`).
+- **Clean Root**: Moved utility scripts to `archive/` and documentation to `docs/`. Root directory now only contains essential entry points.
+- **Normalized Imports**: Adopted relative imports across the package for better maintainability.
+
+### 🛡️ Privacy & Security
+- **Sensitive Data Removal**: Scanned and removed personal paths, API key placeholders, and specific project names from codebase and documentation.
+- **Security Config**: Enhanced `.gitignore` to prevent accidental commit of sensitive configuration files.
+
+### 🔄 Project Retitling
+- **Official Warning**: Renamed project to **"Bibliometric Data Consolidation Tool"**.
+
+### ⚡ Other Improvements
+- **Documentation**: Updated `README.md` and `QUICK_START.md` to reflect new architecture and usage.
+- **CLI Tool**: Added `scripts/run_workflow.py` as the new command-line entry point.
+
+---
+
 ## [4.3.0] - 2025-11-13
 
 ### 🎯 Year Range Filtering System
@@ -491,4 +511,4 @@ grep "^C1 " test/output.txt
 
 **开发者**: Meng Linghan
 **开发工具**: Claude Code
-**GitHub**: https://github.com/myusername/scopus-wos-tools
+**GitHub**: https://github.com/menglinghan/scopus-wos-tools

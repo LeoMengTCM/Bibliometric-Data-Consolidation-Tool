@@ -2,21 +2,17 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-5.0.0-green.svg)](https://github.com/LeoMengTCM/LM_Bibliometrics/releases/tag/v5.0.0)
+[![Version](https://img.shields.io/badge/version-5.1.0-green.svg)](https://github.com/LeoMengTCM/LM_Bibliometrics/releases/tag/v5.1.0)
 
 一套专业的文献计量学数据处理工具，用于整合Scopus和Web of Science（WOS）数据库的文献数据，完美支持CiteSpace、VOSviewer、Bibliometrix等主流分析工具。
 
-> **🔥 v5.0.0 稳定版发布**（2026-01-15）：
-> - 🎯 **作者数据库** - 从WOS文件构建标准化作者数据库
-> - ✅ **自动集成** - Scopus转换时优先使用WOS标准作者名
-> - 📊 **自动可视化** - 文档类型分布图自动生成（PNG + TIFF）
-> - 📁 **项目文件夹结构** - 自动创建标准化项目目录
-> - 🎯 **Final_Version.txt** - 统一最终分析文件命名
-> - ⚡ **批量并发处理** - 20线程并发，3分钟处理660篇
-> - ✅ **WOS格式标准化** - AI驱动的国家名、期刊名标准化
-> - ✅ **AI机构信息补全** - 自动补全州/省代码、邮编、部门信息
->
-> 详见 [CHANGELOG.md](CHANGELOG.md)
+> **🔥 v5.1.0 稳定版发布**（2026-02-01）：
+> - 🏗️ **架构重构** - 采用模块化 Python 包结构 (`src/bibliometrics`)
+> - 🔄 **项目更名** - 正式更名为 "Bibliometric Data Consolidation Tool"
+> - 🛡️ **隐私与安全** - 移除敏感信息，增强安全性
+> - 🗑️ **清理优化** - 移除冗余脚本，优化项目结构
+
+详见 [CHANGELOG.md](docs/release/CHANGELOG_v5.0.0.md)
 
 ---
 
