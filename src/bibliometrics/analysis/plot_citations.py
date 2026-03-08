@@ -18,8 +18,10 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import re
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 from collections import defaultdict
+
+from ..utils.paths import find_existing_analysis_file
 
 
 class PublicationCitationAnalyzer:
@@ -34,7 +36,7 @@ class PublicationCitationAnalyzer:
         """设置专业图表样式"""
         try:
             plt.rcParams['font.family'] = 'Helvetica'
-        except:
+        except Exception:
             print("Helvetica font not found. Falling back to sans-serif.")
             plt.rcParams['font.family'] = 'sans-serif'
 
@@ -119,6 +121,23 @@ class PublicationCitationAnalyzer:
 
         return pd.DataFrame(data)
 
+
+    def _build_trendline(self, values: pd.Series) -> Optional[np.ndarray]:
+        """根据数据点数量自适应生成趋势线。"""
+        point_count = len(values)
+        if point_count < 2:
+            return None
+
+        x_numeric = np.arange(point_count)
+        degree = min(2, point_count - 1)
+        coeffs = np.polyfit(x_numeric, values, degree)
+        return np.poly1d(coeffs)(x_numeric)
+
+    def _get_axis_upper_bound(self, values: pd.Series) -> float:
+        """返回稳健的 Y 轴上界，避免空值或全零时报错。"""
+        max_value = float(values.max()) if not values.empty else 0.0
+        return max(1.0, max_value * 1.25)
+
     def plot_publications(self, data: pd.DataFrame, output_dir: str):
         """
         绘制年度发文量图（带趋势线）
@@ -127,12 +146,7 @@ class PublicationCitationAnalyzer:
             data: 包含Year和Publications列的DataFrame
             output_dir: 输出目录
         """
-        # 创建数值型x轴用于趋势线计算
-        x_numeric = np.arange(len(data['Year']))
-
-        # 计算二次趋势线
-        coeffs = np.polyfit(x_numeric, data['Publications'], 2)
-        trendline = np.poly1d(coeffs)
+        trendline_values = self._build_trendline(data['Publications'])
 
         # 创建图表
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -146,12 +160,13 @@ class PublicationCitationAnalyzer:
         # 添加数值标签
         ax.bar_label(bars, padding=3, fontsize=9, color=self.colors['text'])
 
-        # 绘制趋势线
-        ax.plot(data['Year'], trendline(x_numeric),
-               color=self.colors['trend_publications'],
-               linestyle='--',
-               linewidth=2.5,
-               label='Trend Line')
+        # 绘制趋势线（数据点过少时跳过）
+        if trendline_values is not None:
+            ax.plot(data['Year'], trendline_values,
+                   color=self.colors['trend_publications'],
+                   linestyle='--',
+                   linewidth=2.5,
+                   label='Trend Line')
 
         # 设置样式
         ax.spines['top'].set_visible(False)
@@ -168,7 +183,7 @@ class PublicationCitationAnalyzer:
                      color=self.colors['text'])
         ax.set_xlabel('Year', fontsize=14, labelpad=10,
                      color=self.colors['text'])
-        ax.set_ylim(0, data['Publications'].max() * 1.25)
+        ax.set_ylim(0, self._get_axis_upper_bound(data['Publications']))
 
         # 确保显示所有年份标签
         ax.set_xticks(data['Year'])
@@ -176,7 +191,8 @@ class PublicationCitationAnalyzer:
                 rotation_mode="anchor")
 
         # 添加图例和标签
-        ax.legend(loc='upper left', frameon=False, fontsize=12)
+        if trendline_values is not None:
+            ax.legend(loc='upper left', frameon=False, fontsize=12)
         ax.text(-0.1, 1.05, 'A', transform=ax.transAxes,
                fontsize=24, fontweight='bold', va='top',
                color=self.colors['text'])
@@ -201,12 +217,7 @@ class PublicationCitationAnalyzer:
             data: 包含Year和Citations列的DataFrame
             output_dir: 输出目录
         """
-        # 创建数值型x轴用于趋势线计算
-        x_numeric = np.arange(len(data['Year']))
-
-        # 计算二次趋势线
-        coeffs = np.polyfit(x_numeric, data['Citations'], 2)
-        trendline = np.poly1d(coeffs)
+        trendline_values = self._build_trendline(data['Citations'])
 
         # 创建图表
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -220,12 +231,13 @@ class PublicationCitationAnalyzer:
         # 添加数值标签
         ax.bar_label(bars, padding=3, fontsize=9, color=self.colors['text'])
 
-        # 绘制趋势线
-        ax.plot(data['Year'], trendline(x_numeric),
-               color=self.colors['trend_citations'],
-               linestyle='--',
-               linewidth=2.5,
-               label='Trend Line')
+        # 绘制趋势线（数据点过少时跳过）
+        if trendline_values is not None:
+            ax.plot(data['Year'], trendline_values,
+                   color=self.colors['trend_citations'],
+                   linestyle='--',
+                   linewidth=2.5,
+                   label='Trend Line')
 
         # 设置样式
         ax.spines['top'].set_visible(False)
@@ -242,7 +254,7 @@ class PublicationCitationAnalyzer:
                      color=self.colors['text'])
         ax.set_xlabel('Year', fontsize=14, labelpad=10,
                      color=self.colors['text'])
-        ax.set_ylim(0, data['Citations'].max() * 1.25)
+        ax.set_ylim(0, self._get_axis_upper_bound(data['Citations']))
 
         # 确保显示所有年份标签
         ax.set_xticks(data['Year'])
@@ -250,7 +262,8 @@ class PublicationCitationAnalyzer:
                 rotation_mode="anchor")
 
         # 添加图例和标签
-        ax.legend(loc='upper left', frameon=False, fontsize=12)
+        if trendline_values is not None:
+            ax.legend(loc='upper left', frameon=False, fontsize=12)
         ax.text(-0.1, 1.05, 'B', transform=ax.transAxes,
                fontsize=24, fontweight='bold', va='top',
                color=self.colors['text'])
@@ -275,15 +288,8 @@ class PublicationCitationAnalyzer:
             data: 包含Year, Publications, Citations列的DataFrame
             output_dir: 输出目录
         """
-        # 创建数值型x轴用于趋势线计算
-        x_numeric = np.arange(len(data['Year']))
-
-        # 计算趋势线
-        coeffs_pubs = np.polyfit(x_numeric, data['Publications'], 2)
-        trendline_pubs = np.poly1d(coeffs_pubs)
-
-        coeffs_cites = np.polyfit(x_numeric, data['Citations'], 2)
-        trendline_cites = np.poly1d(coeffs_cites)
+        trendline_pubs = self._build_trendline(data['Publications'])
+        trendline_cites = self._build_trendline(data['Citations'])
 
         # 创建图表（两个子图垂直排列）
         fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(10, 12))
@@ -294,11 +300,12 @@ class PublicationCitationAnalyzer:
                        edgecolor='black',
                        linewidth=0.5)
         ax1.bar_label(bars1, padding=3, fontsize=9, color=self.colors['text'])
-        ax1.plot(data['Year'], trendline_pubs(x_numeric),
-                color=self.colors['trend_publications'],
-                linestyle='--',
-                linewidth=2.5,
-                label='Trend Line')
+        if trendline_pubs is not None:
+            ax1.plot(data['Year'], trendline_pubs,
+                    color=self.colors['trend_publications'],
+                    linestyle='--',
+                    linewidth=2.5,
+                    label='Trend Line')
 
         # 样式设置
         ax1.spines['top'].set_visible(False)
@@ -314,11 +321,12 @@ class PublicationCitationAnalyzer:
                       color=self.colors['text'])
         ax1.set_xlabel('Year', fontsize=14, labelpad=10,
                       color=self.colors['text'])
-        ax1.set_ylim(0, data['Publications'].max() * 1.25)
+        ax1.set_ylim(0, self._get_axis_upper_bound(data['Publications']))
         ax1.set_xticks(data['Year'])
         plt.setp(ax1.get_xticklabels(), rotation=45, ha="right",
                 rotation_mode="anchor")
-        ax1.legend(loc='upper left', frameon=False, fontsize=12)
+        if trendline_pubs is not None:
+            ax1.legend(loc='upper left', frameon=False, fontsize=12)
         ax1.text(-0.1, 1.05, 'A', transform=ax1.transAxes,
                 fontsize=24, fontweight='bold', va='top',
                 color=self.colors['text'])
@@ -329,11 +337,12 @@ class PublicationCitationAnalyzer:
                        edgecolor='black',
                        linewidth=0.5)
         ax2.bar_label(bars2, padding=3, fontsize=9, color=self.colors['text'])
-        ax2.plot(data['Year'], trendline_cites(x_numeric),
-                color=self.colors['trend_citations'],
-                linestyle='--',
-                linewidth=2.5,
-                label='Trend Line')
+        if trendline_cites is not None:
+            ax2.plot(data['Year'], trendline_cites,
+                    color=self.colors['trend_citations'],
+                    linestyle='--',
+                    linewidth=2.5,
+                    label='Trend Line')
 
         # 样式设置
         ax2.spines['top'].set_visible(False)
@@ -349,11 +358,12 @@ class PublicationCitationAnalyzer:
                       color=self.colors['text'])
         ax2.set_xlabel('Year', fontsize=14, labelpad=10,
                       color=self.colors['text'])
-        ax2.set_ylim(0, data['Citations'].max() * 1.25)
+        ax2.set_ylim(0, self._get_axis_upper_bound(data['Citations']))
         ax2.set_xticks(data['Year'])
         plt.setp(ax2.get_xticklabels(), rotation=45, ha="right",
                 rotation_mode="anchor")
-        ax2.legend(loc='upper left', frameon=False, fontsize=12)
+        if trendline_cites is not None:
+            ax2.legend(loc='upper left', frameon=False, fontsize=12)
         ax2.text(-0.1, 1.05, 'B', transform=ax2.transAxes,
                 fontsize=24, fontweight='bold', va='top',
                 color=self.colors['text'])
@@ -371,44 +381,46 @@ class PublicationCitationAnalyzer:
         print(f"  ✓ 各年发文量及引用量组合图已保存")
 
 
-def generate_publications_citations_analysis(data_dir: str):
+def generate_publications_citations_analysis(data_dir: str, final_file: Optional[str] = None):
     """
     生成年度发文量及引用量分析
 
     Args:
         data_dir: 数据目录
+        final_file: 可选，显式指定最终分析文件路径
 
     Returns:
         bool: 是否成功
     """
     data_dir = Path(data_dir)
-    output_dir = data_dir / 'Figures and Tables' / '02 各年发文及引文量'
-    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 文件路径 - 使用最终筛选后的数据（v4.5.0更新：年份过滤已在源头完成）
-    # 尝试查找最终文件（优先使用清洗后的文件）
-    final_file = data_dir / 'Final_Version.txt'
-    if not final_file.exists():
-        final_file = data_dir / 'english_only.txt'
+    # 文件路径 - 优先使用显式传入文件，其次为 Final_Version，再次为 *_only.txt
+    resolved_final_file = find_existing_analysis_file(data_dir, final_file)
 
     # 检查文件
     print("\n检查必要文件...")
-    if not final_file.exists():
-        print(f"  ✗ 最终数据文件: {final_file}")
+    if resolved_final_file is None or not resolved_final_file.exists():
+        print("  ✗ 最终数据文件: 未找到 Final_Version.txt 或 *_only.txt")
         print("\n✗ 缺少必要文件，无法生成图表")
         print("提示：请确保工作流已完整执行")
         return False
 
-    print(f"  ✓ 最终数据文件: {final_file}")
+    print(f"  ✓ 最终数据文件: {resolved_final_file}")
     print("✓ 所有必要文件都存在\n")
 
+    output_dir = data_dir / 'Figures and Tables' / '02 各年发文及引文量'
+    output_dir.mkdir(parents=True, exist_ok=True)
     print(f"✓ 输出目录: {output_dir}\n")
 
     # 分析
     print("正在分析数据...")
     analyzer = PublicationCitationAnalyzer()
-    publications, citations = analyzer.parse_wos_file(str(final_file))
+    publications, citations = analyzer.parse_wos_file(str(resolved_final_file))
     data = analyzer.create_dataframe(publications, citations)
+
+    if data.empty:
+        print("✗ 最终数据文件中没有可用于年度图表的有效记录")
+        return False
 
     # 保存数据
     print("正在保存分析结果...")

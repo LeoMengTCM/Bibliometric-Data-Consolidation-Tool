@@ -24,6 +24,7 @@ import requests
 from typing import Dict, List, Optional
 from pathlib import Path
 from ..gemini_config import GeminiConfig
+from ..utils.paths import resolve_project_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,7 +44,7 @@ class InstitutionDatabase:
         Args:
             db_path: 数据库文件路径
         """
-        self.db_path = Path(db_path)
+        self.db_path = resolve_project_path(db_path)
         self.db = self._load_database()
         self.stats = {
             'db_hits': 0,

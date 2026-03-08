@@ -1,5 +1,9 @@
 # AI补全和重试逻辑分析报告
 
+> [!WARNING]
+> 历史版本文档：本文件保留发布或修复当时的原始上下文，可能包含旧项目名、旧命令、旧仓库链接或过期说明。实际使用请以项目根目录的 `README.md`、`QUICK_START.md` 和 `docs/` 当前使用文档为准。
+
+
 生成时间: 2025-11-23
 分析范围: gemini_enricher_v2.py, wos_standardizer_batch.py, enhanced_converter_batch_v2.py, rate_limiter.py
 

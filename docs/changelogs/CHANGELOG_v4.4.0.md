@@ -1,5 +1,9 @@
 # MultiDatabase v4.4.0 更新日志
 
+> [!WARNING]
+> 历史版本文档：本文件保留发布或修复当时的原始上下文，可能包含旧项目名、旧命令、旧仓库链接或过期说明。实际使用请以项目根目录的 `README.md`、`QUICK_START.md` 和 `docs/` 当前使用文档为准。
+
+
 **发布日期**: 2025-11-17
 **版本**: v4.4.0 (WOS Format Alignment)
 

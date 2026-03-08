@@ -18,7 +18,7 @@
 
 运行方式:
     python3 clean_institutions.py input.txt output.txt
-    python3 clean_institutions.py english_only.txt english_only_cleaned.txt
+    python3 clean_institutions.py chinese_only.txt chinese_only_cleaned.txt
 """
 
 import re
@@ -28,6 +28,8 @@ import sys
 import logging
 from typing import Dict, List, Set, Tuple
 from collections import Counter
+
+from ..utils.paths import resolve_project_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,8 +41,8 @@ logger = logging.getLogger(__name__)
 class InstitutionCleaner:
     """机构名称清洗器"""
 
-    def __init__(self, config_file: str = "config/institution_cleaning_rules.json"):
-        self.config_file = config_file
+    def __init__(self, config_file: str = "config/institution_cleaning_rules_ultimate.json"):
+        self.config_file = str(resolve_project_path(config_file))
         self.rules = self._load_rules()
 
         # 统计信息
@@ -611,8 +613,8 @@ def main():
   # 基本使用
   python3 clean_institutions.py input.txt output.txt
 
-  # 清洗英文文献
-  python3 clean_institutions.py english_only.txt english_only_cleaned.txt
+  # 清洗已筛选语言的文献
+  python3 clean_institutions.py chinese_only.txt chinese_only_cleaned.txt
 
   # 指定配置文件
   python3 clean_institutions.py input.txt output.txt --config config/my_rules.json
@@ -632,8 +634,8 @@ def main():
 
     parser.add_argument('input_file', help='输入WOS文件路径')
     parser.add_argument('output_file', help='输出WOS文件路径')
-    parser.add_argument('--config', default='config/institution_cleaning_rules.json',
-                       help='清洗规则配置文件（默认: config/institution_cleaning_rules.json）')
+    parser.add_argument('--config', default='config/institution_cleaning_rules_ultimate.json',
+                       help='清洗规则配置文件（默认: config/institution_cleaning_rules_ultimate.json）')
     parser.add_argument('--log-level', default='INFO',
                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
                        help='日志级别（默认: INFO）')

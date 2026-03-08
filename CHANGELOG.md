@@ -7,6 +7,23 @@
 
 ---
 
+## [Unreleased] - 2026-03-07
+
+### 🎯 项目定位与文档重写
+- 将当前文档口径统一为：**以 WOS 为主标准的 Scopus→WOS 转换与整合系统**，不再把项目描述为普通数据清洗工具。
+- 重写根目录 `README*`、`QUICK_START*`、`PROJECT_STRUCTURE.md` 与核心中文 docs，明确 WOS 主标准、重复对校准、保守 `C3` 恢复和 `--no-ai` 的真实行为。
+- 新增对仓库自带 `Example/` 示例的明确说明，作为可复现实例和推送前的默认验证入口。
+
+### 🧭 方法边界澄清
+- 明确记录当前方法依赖的是**本地规则 + 当前输入 WOS 语料校准 + 原始 Scopus affiliation 证据**，而不是外部机构数据库查表。
+- 明确记录 WOS / Scopus 重复文献只用于**规则校准与验证**，不用于按 DOI 直接复制 WOS 字段覆盖 Scopus 输出。
+- 明确记录当前 `C3` 迭代保持保守，不回到全局共现乱补 companion 的旧策略。
+
+### ✅ 当前本地验证快照
+- 已基于 `Example/wos.txt` 与 `Example/scopus.csv` 重新运行完整工作流，并继续用 WOS / Scopus 重复文献对照验证。
+- 在当前 local round11 审阅中，100 组重复对的 `C3` 差异已从 `24` 降到 `12`。
+- 该验证结果用于继续收敛 `src/bibliometrics/converters/scopus.py` 中的泛化规则，而不是对单条记录硬拷贝 WOS 字段。
+
 ## [5.1.0] - 2026-02-01
 
 ### 🏗️ 架构重构

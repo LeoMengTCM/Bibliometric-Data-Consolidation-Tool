@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Set
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ..gemini_config import GeminiConfig
+from ..utils.paths import resolve_project_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,7 +39,7 @@ class WOSStandardDatabase:
     """WOS标准格式数据库"""
 
     def __init__(self, db_path: str = 'config/wos_standard_cache.json'):
-        self.db_path = Path(db_path)
+        self.db_path = resolve_project_path(db_path)
         self.db = self._load_database()
 
     def _load_database(self) -> Dict:

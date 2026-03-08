@@ -23,6 +23,7 @@ WOS和Scopus文献数据合并去重工具
 import re
 import os
 import logging
+import unicodedata
 from typing import List, Dict, Set, Tuple
 from collections import defaultdict
 
@@ -46,7 +47,7 @@ class WOSRecordParser:
         Returns:
             List[Dict]: 记录列表，每条记录是一个字典
         """
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
             content = f.read()
 
         # 按ER分割记录（ER是记录结束标记）
@@ -193,10 +194,12 @@ class WOSStandardExtractor:
     """从WOS记录中提取标准格式"""
 
     def __init__(self):
-        self.institutions = {}  # {lowercase: original_format}
-        self.journals = {}      # {lowercase: original_format}
-        self.countries = {}     # {lowercase: original_format}
-        self.authors = {}       # {lowercase: original_format}
+        self.institutions = {}  # {normalized: original_format}
+        self.journals = {}      # {normalized: original_format}
+        self.journal_meta = {}  # {normalized_so: {'SO': ..., 'J9': ..., 'JI': ...}}
+        self.countries = {}     # {normalized: original_format}
+        self.authors = {}       # {normalized: original_format}
+        self.author_full_names = {}  # {normalized_af: {'AF': ..., 'AU': ...}}
 
         # 常见WOS国家名称参考列表（用于辅助验证）
         self.common_wos_countries = {
@@ -211,6 +214,17 @@ class WOSStandardExtractor:
             'iran', 'pakistan', 'bangladesh', 'nigeria', 'kenya', 'scotland',
             'wales', 'northern ireland', 'north ireland'
         }
+
+    @staticmethod
+    def _normalize_lookup_key(text: str) -> str:
+        """为 WOS / Scopus 跨库对齐生成宽松匹配键。"""
+        if not text:
+            return ''
+        text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+        text = text.lower().replace('&', ' and ')
+        text = re.sub(r'[^a-z0-9\s]', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
 
     def _is_valid_country(self, text: str) -> bool:
         """验证文本是否像一个国家名称"""
@@ -311,16 +325,23 @@ class WOSStandardExtractor:
             if 'C3' in record:
                 institutions = [inst.strip() for inst in record['C3'].split(';') if inst.strip()]
                 for inst in institutions:
-                    inst_lower = inst.lower()
-                    if inst_lower not in self.institutions:
-                        self.institutions[inst_lower] = inst
+                    inst_key = self._normalize_lookup_key(inst)
+                    if inst_key not in self.institutions:
+                        self.institutions[inst_key] = inst
 
             # 提取期刊名称（SO字段）
             if 'SO' in record:
                 journal = record['SO'].strip()
-                journal_lower = journal.lower()
-                if journal_lower not in self.journals:
-                    self.journals[journal_lower] = journal
+                journal_key = self._normalize_lookup_key(journal)
+                if journal_key not in self.journals:
+                    self.journals[journal_key] = journal
+                if journal_key not in self.journal_meta:
+                    meta = {'SO': journal}
+                    if record.get('J9', '').strip():
+                        meta['J9'] = record['J9'].strip()
+                    if record.get('JI', '').strip():
+                        meta['JI'] = record['JI'].strip()
+                    self.journal_meta[journal_key] = meta
 
             # 提取国家名称（从C1字段）
             if 'C1' in record:
@@ -339,9 +360,9 @@ class WOSStandardExtractor:
 
                             # 验证是否像一个国家名称
                             if self._is_valid_country(country):
-                                country_lower = country.lower()
-                                if country_lower not in self.countries:
-                                    self.countries[country_lower] = country
+                                country_key = self._normalize_lookup_key(country)
+                                if country_key not in self.countries:
+                                    self.countries[country_key] = country
 
             # 提取作者名称（AU字段）
             if 'AU' in record:
@@ -349,9 +370,21 @@ class WOSStandardExtractor:
                 for author in authors:
                     author = author.strip()
                     if author:
-                        author_lower = author.lower()
-                        if author_lower not in self.authors:
-                            self.authors[author_lower] = author
+                        author_key = self._normalize_lookup_key(author)
+                        if author_key not in self.authors:
+                            self.authors[author_key] = author
+
+            # 提取作者全名（AF字段）与 AU 的对应关系
+            if 'AF' in record:
+                full_names = [name.strip() for name in record['AF'].split('\n') if name.strip()]
+                abbreviated_authors = [name.strip() for name in record.get('AU', '').split('\n') if name.strip()]
+                for index, full_name in enumerate(full_names):
+                    full_name_key = self._normalize_lookup_key(full_name)
+                    if full_name_key not in self.author_full_names:
+                        mapped = {'AF': full_name}
+                        if index < len(abbreviated_authors):
+                            mapped['AU'] = abbreviated_authors[index]
+                        self.author_full_names[full_name_key] = mapped
 
         logger.info(f"✓ 提取完成：")
         logger.info(f"  - 机构: {len(self.institutions)} 个")
@@ -377,21 +410,27 @@ class WOSStandardExtractor:
             standardized_institutions = []
 
             for inst in institutions:
-                inst_lower = inst.lower()
-                # 如果在WOS中出现过，使用WOS的格式
-                if inst_lower in self.institutions:
-                    standardized_institutions.append(self.institutions[inst_lower])
+                inst_key = self._normalize_lookup_key(inst)
+                if inst_key in self.institutions:
+                    standardized_institutions.append(self.institutions[inst_key])
                 else:
                     standardized_institutions.append(inst)
 
             standardized['C3'] = '; '.join(standardized_institutions)
 
-        # 2. 标准化期刊名称（SO字段）
+        # 2. 标准化期刊名称（SO / J9 / JI字段）
         if 'SO' in standardized:
             journal = standardized['SO'].strip()
-            journal_lower = journal.lower()
-            if journal_lower in self.journals:
-                standardized['SO'] = self.journals[journal_lower]
+            journal_key = self._normalize_lookup_key(journal)
+            if journal_key in self.journal_meta:
+                journal_meta = self.journal_meta[journal_key]
+                standardized['SO'] = journal_meta.get('SO', standardized['SO'])
+                if journal_meta.get('J9'):
+                    standardized['J9'] = journal_meta['J9']
+                if journal_meta.get('JI'):
+                    standardized['JI'] = journal_meta['JI']
+            elif journal_key in self.journals:
+                standardized['SO'] = self.journals[journal_key]
 
         # 3. 标准化国家名称（C1字段）
         if 'C1' in standardized:
@@ -412,10 +451,9 @@ class WOSStandardExtractor:
 
                         # 如果这是一个有效的国家名且在WOS中出现过，使用WOS的格式
                         if self._is_valid_country(country):
-                            country_lower = country.lower()
-                            if country_lower in self.countries:
-                                # 替换为WOS标准格式
-                                parts[-1] = ' ' + self.countries[country_lower]
+                            country_key = self._normalize_lookup_key(country)
+                            if country_key in self.countries:
+                                parts[-1] = ' ' + self.countries[country_key]
                                 standardized_line = ','.join(parts) + '.'
                                 if after_period:
                                     standardized_line += after_period
@@ -432,29 +470,46 @@ class WOSStandardExtractor:
 
             standardized['C1'] = '\n'.join(standardized_lines)
 
-        # 4. 标准化作者名称（AU字段）
-        if 'AU' in standardized:
+        # 4. 标准化作者名称（AF / AU字段）
+        if 'AF' in standardized:
+            af_authors = [author.strip() for author in standardized['AF'].split('\n') if author.strip()]
+            au_authors = [author.strip() for author in standardized.get('AU', '').split('\n') if author.strip()]
+            standardized_af = []
+            standardized_au = []
+
+            for index, author in enumerate(af_authors):
+                author_key = self._normalize_lookup_key(author)
+                mapped = self.author_full_names.get(author_key, {})
+                canonical_af = mapped.get('AF', author)
+                canonical_au = mapped.get('AU', au_authors[index] if index < len(au_authors) else '')
+
+                if canonical_au:
+                    canonical_au_key = self._normalize_lookup_key(canonical_au)
+                    canonical_au = self.authors.get(canonical_au_key, canonical_au)
+
+                standardized_af.append(canonical_af)
+                if canonical_au:
+                    standardized_au.append(canonical_au)
+
+            if standardized_af:
+                standardized['AF'] = '\n'.join(standardized_af)
+            if standardized_au:
+                standardized['AU'] = '\n'.join(standardized_au)
+
+        elif 'AU' in standardized:
             authors = standardized['AU'].split('\n')
             standardized_authors = []
 
             for author in authors:
                 author = author.strip()
                 if author:
-                    author_lower = author.lower()
-                    # 如果在WOS中出现过，使用WOS的格式
-                    if author_lower in self.authors:
-                        standardized_authors.append(self.authors[author_lower])
+                    author_key = self._normalize_lookup_key(author)
+                    if author_key in self.authors:
+                        standardized_authors.append(self.authors[author_key])
                     else:
                         standardized_authors.append(author)
 
             standardized['AU'] = '\n'.join(standardized_authors)
-
-            # AF字段（全名）也需要对齐
-            if 'AF' in standardized:
-                af_authors = standardized['AF'].split('\n')
-                if len(af_authors) == len(standardized_authors):
-                    # 保持AF和AU的顺序一致
-                    standardized['AF'] = '\n'.join(af_authors)
 
         return standardized
 
@@ -485,7 +540,7 @@ class RecordMerger:
 
         # 2. 补充缺失字段（从Scopus）
         # 注意：C1和C3（机构信息）必须优先使用WOS的，绝不从Scopus补充！
-        supplement_fields = ['AB', 'LA', 'DT', 'PU', 'SN', 'J9', 'JI', 'PM', 'DI']
+        supplement_fields = ['AB', 'LA', 'DT', 'PU', 'SN', 'J9', 'JI', 'PM', 'DI', 'EM']
         for field in supplement_fields:
             if not merged.get(field) and scopus_record.get(field):
                 merged[field] = scopus_record[field]

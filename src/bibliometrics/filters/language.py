@@ -13,7 +13,7 @@
 
 运行方式:
     python3 filter_language.py input.txt output.txt --language English
-    python3 filter_language.py merged_deduplicated.txt english_only.txt
+    python3 filter_language.py merged_deduplicated.txt chinese_only.txt --language Chinese
 """
 
 import re
@@ -281,7 +281,7 @@ def main():
 
     parser = argparse.ArgumentParser(
         description='文献语言筛选工具 - 筛选指定语言的文献记录',
-        epilog='示例: python3 filter_language.py merged_deduplicated.txt english_only.txt --language English',
+        epilog='示例: python3 filter_language.py merged_deduplicated.txt chinese_only.txt --language Chinese',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 

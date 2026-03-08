@@ -11,7 +11,7 @@
 ### 发现的问题
 在准备推送v5.0.0到GitHub时，发现以下敏感信息被硬编码：
 
-- **API密钥**: `sk-leomeng1997`
+- **API密钥**: `<redacted-revoked-key>`
 - **API URL**: `https://gptload.drmeng.top/proxy/bibliometrics/v1beta`
 - **影响文件**: 13个（9个源文件 + 4个文档）
 - **Git状态**: 已推送到GitHub远程仓库
@@ -77,7 +77,7 @@
 **必须立即执行！**
 
 1. 登录: `https://gptload.drmeng.top` 或你的API管理后台
-2. 找到密钥: `sk-leomeng1997`
+2. 找到密钥: `<redacted-revoked-key>`
 3. **删除/撤销**此密钥
 4. **生成新密钥**并保存
 
@@ -149,7 +149,7 @@ git push origin --tags --force
 ## 📋 完整检查清单
 
 ### 必须完成 ⭐
-- [ ] **撤销旧API密钥** `sk-leomeng1997`（API提供商）
+- [ ] **撤销旧API密钥** `<redacted-revoked-key>`（API提供商）
 - [ ] **生成新API密钥**（API提供商）
 - [ ] **运行** `python3 remove_hardcoded_keys.py`
 - [ ] **创建** `.env` 文件并填入新密钥

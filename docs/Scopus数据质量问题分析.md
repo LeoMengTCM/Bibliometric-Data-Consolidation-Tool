@@ -1,411 +1,155 @@
-# Scopus数据质量问题分析报告
+# Scopus→WOS 对齐中的质量问题与当前处理策略
 
-**作者**: Meng Linghan
-**日期**: 2025-11-12
-**版本**: v1.0
+## 这份文档的定位
 
----
+这不是一份“普通数据清洗问题汇总”，而是一份针对当前项目主线的背景说明：
 
-## 📊 问题概述
+- 为什么 Scopus→WOS 转换难
+- 为什么不能把问题简化为普通机构清洗
+- 为什么当前系统要用 WOS 重复对做校准
+- 为什么 `C3` 需要保守处理，而不能全局乱补
 
-在使用VOSviewer进行机构共现分析时，发现Scopus转换后的数据存在严重的数据质量问题，导致：
-- **机构名称重复**：同一机构出现多次（如 "Sichuan University; Sichuan University; Sichuan University"）
-- **名称变体混乱**：同一机构有多种写法（如 "Harvard University" vs "Harvard Medical School"）
-- **父子机构未合并**：子机构应该归属到父机构（如 "Fudan University Shanghai Cancer Center" → "Fudan University"）
-- **噪音数据**：无意义的机构名（如 ".", "hosp", "inst", "ltd"）
+## 核心判断
 
-### 数据统计
-
-从660篇英文文献中提取的机构数据：
-- **总机构数（含重复）**: 2047
-- **唯一机构数**: 933
-- **重复率**: 119.4%（平均每个唯一机构出现1.19次）
+Scopus 的问题不只是“脏”，而是**与 WOS 的组织表达层级不一致**。这会直接影响：
 
----
+- 转换后的 WOS 风格是否自然
+- WOS / Scopus 去重是否稳定
+- Scopus 独有记录能否顺利融入 WOS 语料
+- 后续机构共现、合作网络、机构排名等分析结果
 
-## 🔍 问题根源分析
+因此，当前项目的主问题应理解为：**Scopus→WOS 对齐问题**，而不是普通清洗问题。
 
-### 1. Scopus数据库本身的问题
+## 当前最重要的问题类型
 
-#### 1.1 数据缺失
-Scopus数据库的机构信息完整度**远低于WOS**：
+### 1. companion / parent 级组织缺失
 
-| 字段 | WOS完整度 | Scopus完整度 | 差距 |
-|------|-----------|--------------|------|
-| 州/省代码 | 100% | 40% | -60% |
-| 邮编 | 100% | 30% | -70% |
-| 部门信息 | 90% | 50% | -40% |
-| 机构层级 | 清晰 | 混乱 | - |
-
-**示例**：
-```
-WOS:    [Smith, J] Harvard Univ, Med Sch, Dept Oncol, Boston, MA 02115 USA
-Scopus: [Smith, J] Harvard University, Boston, United States
-```
-
-#### 1.2 识别错误
-Scopus在机构识别时存在以下问题：
-
-**问题1：父子机构混杂**
-```
-错误示例：
-C3 Harvard University; Harvard Medical School; Harvard University Medical Affiliates
-
-正确应该是：
-C3 Harvard University
-```
-
-**问题2：同一机构重复**
-```
-错误示例：
-C3 Sichuan University; Sichuan University; Sichuan University
-
-正确应该是：
-C3 Sichuan University
-```
-
-**问题3：名称变体不统一**
-```
-错误示例：
-- huazhong university of science and technology (9次)
-- huazhong university of science & technology (3次)
-
-正确应该统一为：
-- Huazhong University of Science & Technology
-```
+Scopus 经常只给出局部单位，而 WOS 更容易保留 companion / parent 级组织。常见表现包括：
 
----
+- institute 缺 academy / university companion
+- hospital 缺 university / system companion
+- research center 缺 parent institution
 
-## 📈 实际数据分析结果
+这类问题会直接造成 `C3` 与 WOS 风格不一致。
 
-### 重复最多的机构（Top 10）
-
-| 机构名称 | 出现次数 | 问题类型 |
-|---------|---------|---------|
-| Chinese Academy of Sciences | 44 | 正常（高产机构） |
-| Shanghai Jiao Tong University | 33 | 正常 |
-| Sichuan University | 22 | 正常 |
-| University of Texas System | 21 | 系统级机构（应合并到具体校区） |
-| Fudan University | 20 | 正常 |
-| Wuhan University | 19 | 正常 |
-| Nanjing Medical University | 19 | 正常 |
-| Harvard University | 19 | 正常 |
-| Harvard Medical School | 18 | **应合并到Harvard University** |
-| Jinan University | 14 | 正常 |
+### 2. 机构层级选择不一致
 
-### 发现的主要问题类型
+同一条记录里，Scopus 和 WOS 可能都“没错”，但选择的组织层级不同，例如：
 
-#### 类型1：父子机构未合并（68个案例）
+- 只保留具体 institute
+- 只保留 parent university / academy
+- 同时保留 institute + parent
+- system 级组织是否进入 `C3`
 
-**中国高校**：
-```
-父机构: Harvard University (19次)
-  └─ 子机构: Harvard Medical School (18次)
-  └─ 子机构: Harvard University Medical Affiliates (14次)
-
-父机构: Fudan University (20次)
-  └─ 子机构: Fudan University Shanghai Cancer Center (多次)
-  └─ 子机构: Zhongshan Hospital Fudan University (多次)
-
-父机构: Sichuan University (22次)
-  └─ 子机构: West China Hospital Sichuan University (多次)
-```
-
-**国际高校**：
-```
-父机构: University of Texas (21次)
-  └─ 子机构: UTMD Anderson Cancer Center (11次)
-
-父机构: University of North Carolina (11次)
-  └─ 子机构: University of North Carolina Chapel Hill (多次)
-```
-
-#### 类型2：名称变体（20组）
-
-**连字符差异**：
-```
-- huazhong university of science and technology (3次)
-- huazhong university of science & technology (9次)
-→ 应统一为: Huazhong University of Science & Technology
-```
-
-**拼写差异**：
-```
-- national sun yat-sen university (1次)
-- national sun yat sen university (1次)
-→ 应统一为: National Sun Yat-sen University
-```
-
-**缩写差异**：
-```
-- university of chinese academy of sciences (11次)
-- university of chinese academy of sciences, cas (10次)
-→ 应统一为: University of Chinese Academy of Sciences
-```
-
-#### 类型3：系统级vs具体校区
-
-```
-问题：
-- University of Texas System (21次)
-- University of Massachusetts System (2次)
-- University of Nebraska System (1次)
-
-建议：
-这些"System"级别的机构应该合并到具体校区，或者作为独立机构保留
-```
-
-#### 类型4：医院归属问题
-
-```
-独立医院（应保留）：
-- Brigham & Women's Hospital (11次)
-- Mayo Clinic (独立医疗机构)
-
-附属医院（应合并）：
-- Ghent University Hospital → Ghent University
-- Asan Medical Center → University of Ulsan
-```
-
----
-
-## 💡 解决方案
-
-### 方案1：使用清洗工具（已实现）
-
-我已经创建了 `clean_institutions.py` 工具，可以：
-
-1. **移除噪音数据**：过滤无意义的机构名
-2. **统一名称变体**：标准化不同写法
-3. **合并父子机构**：将子机构归属到父机构
-4. **去除重复**：同一记录中的重复机构
-
-**使用方法**：
-```bash
-python3 clean_institutions.py english_only.txt english_only_cleaned.txt
-```
-
-**效果**：
-- 唯一机构数：933 → 约800-850（预计减少10-15%）
-- 重复率：119.4% → 约105-110%
-
-### 方案2：手动编辑清洗规则
-
-编辑 `config/institution_cleaning_rules.json`，添加你发现的特定问题：
-
-```json
-{
-  "parent_child_mapping": {
-    "harvard medical school": "harvard university",
-    "harvard university medical affiliates": "harvard university",
-    "utmd anderson cancer center": "university of texas",
-    "fudan university shanghai cancer center": "fudan university"
-  },
-
-  "standardization_rules": {
-    "huazhong university of science and technology": "huazhong university of science & technology",
-    "national sun yat sen university": "national sun yat-sen university"
-  }
-}
-```
-
-### 方案3：使用WOS+Scopus合并数据（推荐）
-
-**为什么推荐**：
-- WOS数据质量更高，机构信息更完整
-- Scopus覆盖范围更广，可以补充WOS缺失的文献
-- 合并后取两者之长
-
-**已实现的工作流**：
-```bash
-python3 run_ai_workflow.py --data-dir "/path/to/data"
-```
-
-这个工作流会：
-1. 转换Scopus → WOS格式
-2. AI补全机构信息（州/省代码、邮编、部门）
-3. 合并WOS + Scopus（WOS优先）
-4. 去重
-5. 语言筛选
-6. 统计分析
-
----
-
-## 📊 数据质量对比
-
-### 转换前后对比
-
-| 指标 | 原始Scopus | AI增强后 | WOS原始 |
-|------|-----------|---------|---------|
-| 机构完整度 | 60% | 95% | 100% |
-| 州/省代码 | 30% | 90% | 100% |
-| 邮编 | 20% | 85% | 100% |
-| 部门信息 | 50% | 90% | 90% |
-| 名称标准化 | 70% | 95% | 98% |
-
-### VOSviewer分析效果
-
-**清洗前**：
-- 唯一机构数：933
-- 噪音节点：约50-100个
-- 重复节点：约100-150个
-- 可用性：⭐⭐⭐ (3/5)
-
-**清洗后**：
-- 唯一机构数：约800-850
-- 噪音节点：<10个
-- 重复节点：<30个
-- 可用性：⭐⭐⭐⭐ (4/5)
-
-**使用WOS+Scopus合并**：
-- 唯一机构数：约700-750
-- 噪音节点：<5个
-- 重复节点：<10个
-- 可用性：⭐⭐⭐⭐⭐ (5/5)
-
----
-
-## 🎯 最佳实践建议
-
-### 1. 数据采集阶段
-- **优先使用WOS数据**：如果你的机构有WOS访问权限
-- **Scopus作为补充**：用于覆盖WOS未收录的文献
-- **导出完整字段**：Scopus导出时选择"All available information"
-
-### 2. 数据处理阶段
-- **使用AI增强工作流**：`run_ai_workflow.py`
-- **启用机构清洗**：`clean_institutions.py`
-- **检查清洗报告**：查看 `*_cleaning_report.txt`
-
-### 3. VOSviewer分析阶段
-- **使用清洗后的数据**：`english_only_cleaned.txt`
-- **设置最小阈值**：机构至少出现2-3次
-- **手动检查Top机构**：确认没有明显的重复或错误
-
-### 4. 论文写作阶段
-- **说明数据来源**：WOS + Scopus
-- **说明处理方法**：AI增强 + 机构清洗
-- **报告数据质量**：清洗前后对比
-
----
-
-## 📝 论文方法学参考文本
-
-### 中文版
-
-> 本研究的文献数据来源于Web of Science (WOS)核心合集和Scopus数据库。检索时间范围为2015-2024年，检索策略为...（此处填写具体检索式）。
->
-> 为确保数据质量和完整性，我们采用了以下数据处理流程：
-> 1. **格式转换**：将Scopus CSV格式转换为WOS标准纯文本格式，确保与主流文献计量分析工具（VOSviewer、CiteSpace）的兼容性。
-> 2. **AI智能增强**：使用Gemini 2.5 Flash模型对Scopus数据进行智能补全，包括机构的州/省代码、邮政编码和部门信息，使其达到WOS数据的完整度标准（补全率93.5%）。
-> 3. **数据合并去重**：基于DOI和标题匹配算法，智能合并WOS和Scopus数据，去除重复文献120篇，保留WOS记录优先，Scopus信息补充。
-> 4. **机构名称清洗**：针对Scopus数据中的机构名称变体、父子机构混杂等问题，采用规则匹配和相似度算法进行标准化处理，唯一机构数从933个优化至约850个（减少约10%）。
-> 5. **语言筛选**：保留英文文献660篇（占总数99.0%），用于后续分析。
->
-> 最终获得有效文献660篇，其中Article 469篇（71.1%），Review 189篇（28.6%）。使用VOSviewer 1.6.19进行机构共现网络分析，CiteSpace 6.2.R4进行时间序列分析。
-
-### 英文版
-
-> Literature data for this study were retrieved from the Web of Science (WOS) Core Collection and Scopus database, covering the period from 2015 to 2024. The search strategy was... (insert specific search terms).
->
-> To ensure data quality and completeness, we implemented the following data processing workflow:
-> 1. **Format Conversion**: Converted Scopus CSV format to WOS standard plain text format for compatibility with mainstream bibliometric analysis tools (VOSviewer, CiteSpace).
-> 2. **AI-Enhanced Enrichment**: Utilized Gemini 2.5 Flash model to intelligently enrich Scopus data with missing information, including state/province codes, postal codes, and department details, achieving WOS-level completeness (93.5% enrichment rate).
-> 3. **Data Merging and Deduplication**: Applied DOI and title-based matching algorithms to intelligently merge WOS and Scopus data, removing 120 duplicate records while prioritizing WOS records and supplementing with Scopus information.
-> 4. **Institution Name Cleaning**: Addressed issues in Scopus data such as institution name variants and parent-child institution mixing through rule-based matching and similarity algorithms, reducing unique institutions from 933 to approximately 850 (10% reduction).
-> 5. **Language Filtering**: Retained 660 English-language publications (99.0% of total) for subsequent analysis.
->
-> The final dataset comprised 660 valid publications, including 469 Articles (71.1%) and 189 Reviews (28.6%). VOSviewer 1.6.19 was used for institution co-occurrence network analysis, and CiteSpace 6.2.R4 for temporal analysis.
-
----
-
-## 🔧 工具使用指南
-
-### 完整工作流（推荐）
+这里不能靠“谁出现过就都补上”，必须保持保守。
+
+### 3. 原始 affiliation 片段化，导致映射不稳
+
+Scopus 原始 affiliation 常常更碎、更短、层级关系更模糊。如果直接复用某个参考映射，很容易误把：
+
+- 不相干的 parent 组织补进去
+- 另一个机构系统的 companion 错迁过来
+- 只在少数重复对里成立的模式泛化到全局
+
+因此需要 plausibility guard 来控制精确映射复用。
+
+### 4. WOS 风格往往更压缩、更规范
+
+WOS 在组织名表达上经常更压缩，例如：
+
+- 简写更稳定
+- parent / companion 组合更固定
+- 同一机构的写法更集中
+
+Scopus 转换后的目标不是逐字符复刻 WOS，而是尽量对齐到**结构、层级和可分析性**都接近 WOS。
+
+### 5. Scopus 也可能比 WOS 更“多”
+
+有些重复对里，Scopus 的 `C3` 会比 WOS 多出若干组织。这里不能简单认为“更多就更好”。
+
+当前系统的原则是：
+
+- 优先减少明确的漏项
+- 对明显多出的组织保持谨慎
+- 不为了追求表面一致而盲目删减或扩写
+
+## 当前处理策略
+
+### 策略一：先做本地转换，再做 WOS 校准
+
+系统先把 Scopus 转成 WOS 风格结构，再利用当前 `wos.txt` 中的重复记录校准差异，而不是先做一堆泛化清洗再说。
+
+### 策略二：重复对用于校准规则，不用于直接抄字段
+
+重复文献最重要的作用是回答两个问题：
+
+1. 哪些组织在 Scopus 中经常被漏掉？
+2. 这些漏项能否从原始 Scopus affiliation 中找到足够证据？
+
+如果没有证据，就不应该因为 WOS 里出现过而直接补回。
+
+### 策略三：补充必须有原始 Scopus affiliation 证据
+
+当前 round 迭代中，`C3` 的 companion 恢复必须尽量依赖：
+
+- 原始 affiliation 文本中的局部短语
+- institute / center / hospital / academy / university 的可追溯关联
+- 当前 WOS 输入中重复对所揭示的稳定模式
+
+### 策略四：对精确映射加合理性保护
+
+即使某个 WOS / Scopus 重复对里出现过“精确映射”，也不能无条件套用到其他记录。当前系统会增加合理性保护，避免：
+
+- 一次匹配，处处复用
+- system / parent 级组织误补
+- 不同机构体系之间发生串扰
+
+### 策略五：明确拒绝激进的全局共现补全
+
+当前系统明确避免回到早期那种“只要全局经常共现，就全部补进 `C3`”的策略，因为它会快速引入大量噪声。
+
+## 当前方法不是什么
+
+当前方法：
+
+- 不是普通机构清洗
+- 不是单纯外部数据库查表
+- 不是按 DOI 复制 WOS 字段
+- 不是纯统计共现补全
+
+更准确地说，它是一个：
+
+- 基于本地规则
+- 以当前 WOS 输入为主标准
+- 结合重复对校准
+- 结合原始 Scopus affiliation 证据
+- 保守迭代 `C3`
+
+的 Scopus→WOS 转换与整合流程。
+
+## 当前验证快照
+
+当前本地示例验证方式：
 
 ```bash
-# 1. 运行AI增强工作流
-python3 run_ai_workflow.py --data-dir "/path/to/data"
-
-# 2. 清洗机构名称
-python3 clean_institutions.py \
-    "/path/to/data/english_only.txt" \
-    "/path/to/data/english_only_cleaned.txt"
-
-# 3. 分析机构名称（可选，用于检查）
-python3 analyze_institutions.py "/path/to/data/english_only_cleaned.txt"
-
-# 4. 导入VOSviewer进行分析
-# File → Create → Based on bibliographic data → Web of Science
-# 选择 english_only_cleaned.txt
+python3 run_ai_workflow.py --data-dir Example --no-ai
 ```
 
-### 自定义清洗规则
+已实际基于 `Example/wos.txt` 与 `Example/scopus.csv` 做重复对核对。当前 local round11 快照为：
 
-编辑 `config/institution_cleaning_rules.json`：
+- 重复对数量：100 组
+- 关注字段：`C3`
+- 差异数量：从 `24` 降到 `12`
 
-```json
-{
-  "noise_patterns": [
-    "^\\.$",
-    "^hosp$",
-    "^inst$"
-  ],
+这类验证结果说明：当前改进是通过规则收敛逐步逼近 WOS，而不是靠直接借用 WOS 字段制造“伪一致”。
 
-  "standardization_rules": {
-    "你的机构变体1": "标准名称",
-    "你的机构变体2": "标准名称"
-  },
+## 后续仍需关注的残留方向
 
-  "parent_child_mapping": {
-    "子机构名称": "父机构名称",
-    "要删除的机构": "REMOVE"
-  }
-}
-```
+即使在当前 round11 后，残留问题仍主要集中在以下模式：
 
----
+- academy / institute / university companion 仍有少量漏项
+- hospital / research center 的 parent 级组织偶有缺失
+- system 级组织需要更严格但仍保守的触发条件
+- 少数记录中 Scopus 比 WOS 额外多出组织，仍需进一步判断是否应收敛
 
-## 📚 参考资料
-
-### 相关文档
-- `CLAUDE.md` - 项目开发指南
-- `QUICK_START.md` - 快速开始指南
-- `docs/AI补全系统完整总结.md` - AI增强系统说明
-- `docs/WOS标准化说明.md` - WOS格式标准化说明
-
-### 工具脚本
-- `run_ai_workflow.py` - AI增强工作流
-- `clean_institutions.py` - 机构名称清洗工具
-- `analyze_institutions.py` - 机构名称分析工具
-- `merge_deduplicate.py` - 合并去重工具
-
-### 配置文件
-- `config/institution_cleaning_rules.json` - 清洗规则
-- `config/institution_ai_cache.json` - AI补全缓存
-- `config/wos_standard_cache.json` - WOS标准化缓存
-
----
-
-## ✅ 总结
-
-### 问题本质
-Scopus数据质量问题的根源在于：
-1. **数据库设计差异**：Scopus注重覆盖面，WOS注重标准化
-2. **机构识别算法**：Scopus的机构识别不如WOS精确
-3. **数据完整度**：Scopus缺少地理和层级信息
-
-### 解决方案
-1. **短期**：使用清洗工具处理现有数据
-2. **中期**：采用WOS+Scopus合并策略
-3. **长期**：优先使用WOS数据，Scopus仅作补充
-
-### 效果评估
-- **数据质量提升**：从3/5星提升至4-5/5星
-- **分析准确性**：机构共现网络更清晰
-- **论文可信度**：方法学更严谨
-
----
-
-**最后更新**: 2025-11-12
-**工具版本**: v4.0.1 (Batch Concurrent Optimization)
+后续迭代仍应坚持：**先看重复对，再看原始 affiliation 证据，再决定是否写成泛化规则。**

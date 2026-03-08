@@ -25,9 +25,26 @@ __pycache__/
 
 # macOS
 .DS_Store
+._*
+.Spotlight-V100
+.Trashes
 
 # 用户数据文件（示例）
 # 如果您的数据目录在项目内，请添加：
 # data/
 # *.csv
 # *.txt
+.___pycache__/
+
+# 本地审阅与示例运行产物
+/tmp_review_*/
+/tmp_review_probe_*/
+Example/Figures and Tables/
+Example/data/
+Example/project/
+Example/Final_Version*.txt
+Example/english_only*.txt
+Example/merged_deduplicated*.txt
+Example/scopus_converted_to_wos.txt
+Example/scopus_enriched.txt
+Example/ai_workflow_report.txt

@@ -15,7 +15,16 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from .utils.paths import resolve_project_path
+
 logger = logging.getLogger(__name__)
+
+
+PLACEHOLDER_API_KEYS = {
+    'YOUR_API_KEY',
+    'YOUR_API_KEY_HERE',
+    'YOUR_GEMINI_API_KEY'
+}
 
 
 class GeminiConfig:
@@ -50,9 +59,17 @@ class GeminiConfig:
         self.retry_delay = int(os.getenv('GEMINI_RETRY_DELAY', '5'))  # 秒
 
         # 功能开关
-        self.enabled = bool(self.api_key)
+        self.enabled = self._has_real_api_key(self.api_key)
         self.enable_caching = True
         self.fallback_to_rules = True
+
+    @staticmethod
+    def _has_real_api_key(api_key: Optional[str]) -> bool:
+        if not api_key:
+            return False
+
+        normalized = api_key.strip()
+        return bool(normalized) and normalized not in PLACEHOLDER_API_KEYS
 
     @classmethod
     def from_file(cls, config_file: str = 'config/gemini_config.json') -> 'GeminiConfig':
@@ -65,7 +82,7 @@ class GeminiConfig:
         Returns:
             GeminiConfig实例
         """
-        config_path = Path(config_file)
+        config_path = resolve_project_path(config_file)
 
         if not config_path.exists():
             logger.warning(f"配置文件不存在: {config_file}，使用默认配置")
@@ -106,7 +123,7 @@ class GeminiConfig:
         Args:
             config_file: 配置文件路径
         """
-        config_path = Path(config_file)
+        config_path = resolve_project_path(config_file)
         config_path.parent.mkdir(parents=True, exist_ok=True)
 
         config_data = {
@@ -127,11 +144,11 @@ class GeminiConfig:
 
     def is_enabled(self) -> bool:
         """检查是否启用Gemini API"""
-        return self.enabled and bool(self.api_key)
+        return self.enabled and self._has_real_api_key(self.api_key)
 
     def validate(self) -> bool:
         """验证配置是否有效"""
-        if not self.api_key:
+        if not self._has_real_api_key(self.api_key):
             logger.error("API密钥未配置")
             return False
 
@@ -160,7 +177,7 @@ class GeminiConfig:
 
 def create_default_config_file():
     """创建默认配置文件模板"""
-    config_path = Path('config/gemini_config.json')
+    config_path = resolve_project_path('config/gemini_config.json')
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     if config_path.exists():

@@ -8,7 +8,7 @@
 ## ✅ 已完成的所有步骤
 
 ### 1. ✅ 用户撤销API密钥
-- 旧密钥 `sk-leomeng1997` 已撤销
+- 旧密钥 `<redacted-revoked-key>` 已撤销
 - 新密钥已生成
 
 ### 2. ✅ 自动替换硬编码密钥
@@ -48,7 +48,7 @@
 ### 替换内容
 **修改前**:
 ```python
-api_key='sk-leomeng1997',
+api_key='<redacted-revoked-key>',
 api_url='https://gptload.drmeng.top/proxy/bibliometrics/v1beta',
 ```
 
@@ -68,7 +68,7 @@ security: Remove hardcoded API keys, use environment variables
 
 BREAKING CHANGE: API credentials must now be provided via environment variables.
 
-- Remove hardcoded API key 'sk-leomeng1997' from all source files
+- Remove hardcoded API key '<redacted-revoked-key>' from all source files
 - Replace with os.getenv('GEMINI_API_KEY') in 8 Python files
 - Add .env.example template for configuration
 - Update .gitignore to exclude .env and secret files
@@ -157,7 +157,7 @@ git push origin --tags --force
 
 ## ✅ 检查清单
 
-- [x] 用户撤销旧API密钥 `sk-leomeng1997`
+- [x] 用户撤销旧API密钥 `<redacted-revoked-key>`
 - [x] 生成新API密钥
 - [x] 运行自动替换脚本（8个文件已修改）
 - [x] 创建安全文档和工具（11个新文件）

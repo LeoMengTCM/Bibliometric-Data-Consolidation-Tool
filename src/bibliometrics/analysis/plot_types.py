@@ -10,7 +10,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import re
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Optional
+
+from ..utils.paths import find_existing_analysis_file
 
 
 class DocumentTypeAnalyzer:
@@ -23,7 +25,7 @@ class DocumentTypeAnalyzer:
         """设置图表样式"""
         try:
             plt.rcParams['font.family'] = 'Arial'
-        except:
+        except Exception:
             pass
         plt.rcParams['axes.labelsize'] = 14
         plt.rcParams['xtick.labelsize'] = 12
@@ -97,13 +99,10 @@ class DocumentTypeAnalyzer:
             min_year: 最小年份（可选）
             max_year: 最大年份（可选）
         """
-        # 对 WOS 应用年份筛选
+        # 为了兼容 workflow 与独立调用，三个输入都允许再次应用年份筛选。
         wos_counts = self.parse_wos_file(wos_file, min_year, max_year)
-        # Scopus 文件已经在workflow中过滤过年份，不需要再次筛选
-        # （scopus_enriched.txt 来自 scopus_year_filtered.csv，已包含年份筛选）
-        scopus_counts = self.parse_wos_file(scopus_file, None, None)
-        # Final 文件已经是筛选后的，不需要再次筛选
-        final_counts = self.parse_wos_file(final_file)
+        scopus_counts = self.parse_wos_file(scopus_file, min_year, max_year)
+        final_counts = self.parse_wos_file(final_file, min_year, max_year)
 
         data = pd.DataFrame({
             'Article_Type': ['Article', 'Review'],
@@ -185,13 +184,14 @@ class DocumentTypeAnalyzer:
         print(f"✓ 图表已保存: {output_path}/document_types.tiff 和 .png")
 
 
-def generate_document_type_analysis(data_dir: str, min_year: int = None, max_year: int = None):
+def generate_document_type_analysis(data_dir: str, min_year: int = None, max_year: int = None, final_file: Optional[str] = None):
     """生成文档类型分析
 
     Args:
         data_dir: 数据目录
         min_year: 最小年份（可选，如果指定则对 WOS 和 Scopus 数据也进行年份筛选）
         max_year: 最大年份（可选，如果指定则对 WOS 和 Scopus 数据也进行年份筛选）
+        final_file: 可选，显式指定最终分析文件路径
     """
     data_dir = Path(data_dir)
 
@@ -203,10 +203,8 @@ def generate_document_type_analysis(data_dir: str, min_year: int = None, max_yea
     if not scopus_file.exists():
         scopus_file = data_dir / 'scopus_converted_to_wos.txt'
 
-    # 尝试查找最终文件（优先使用清洗后的文件）
-    final_file = data_dir / 'Final_Version.txt'
-    if not final_file.exists():
-        final_file = data_dir / 'english_only.txt'
+    # 尝试查找最终文件（优先使用显式传入文件，其次为 Final_Version，再次为 *_only.txt）
+    final_file = find_existing_analysis_file(data_dir, final_file)
 
     # 先检查文件是否存在（检查失败就不创建输出目录）
     print("\n检查必要文件...")
@@ -221,8 +219,8 @@ def generate_document_type_analysis(data_dir: str, min_year: int = None, max_yea
     else:
         print(f"  ✓ Scopus 转换文件: {scopus_file}")
 
-    if not final_file.exists():
-        missing_files.append(f"  ✗ 最终数据文件: {final_file}")
+    if final_file is None or not final_file.exists():
+        missing_files.append("  ✗ 最终数据文件: 未找到 Final_Version.txt 或 *_only.txt")
     else:
         print(f"  ✓ 最终数据文件: {final_file}")
 
@@ -296,13 +294,14 @@ def generate_document_type_analysis(data_dir: str, min_year: int = None, max_yea
     return True
 
 
-def generate_all_figures(data_dir: str, min_year: int = None, max_year: int = None):
+def generate_all_figures(data_dir: str, min_year: int = None, max_year: int = None, final_file: Optional[str] = None):
     """生成所有图表（文档类型 + 年度发文及引用量）
 
     Args:
         data_dir: 数据目录
         min_year: 最小年份（可选）
         max_year: 最大年份（可选）
+        final_file: 可选，显式指定最终分析文件路径
 
     Returns:
         bool: 是否成功
@@ -316,14 +315,14 @@ def generate_all_figures(data_dir: str, min_year: int = None, max_year: int = No
 
     # 1. 生成文档类型分析图
     print("\n[1/2] 文档类型分析")
-    if generate_document_type_analysis(data_dir, min_year, max_year):
+    if generate_document_type_analysis(data_dir, min_year, max_year, final_file=final_file):
         success_count += 1
 
     # 2. 生成年度发文及引用量图
     print("\n[2/2] 年度发文及引用量分析")
     try:
         from .plot_citations import generate_publications_citations_analysis
-        if generate_publications_citations_analysis(data_dir):
+        if generate_publications_citations_analysis(data_dir, final_file=final_file):
             success_count += 1
     except ImportError as e:
         print(f"⚠ 无法导入年度发文及引用量分析模块: {e}")

@@ -1,5 +1,9 @@
 # MultiDatabase v5.0.0 - 项目最终状态
 
+> [!WARNING]
+> 历史版本文档：本文件保留发布或修复当时的原始上下文，可能包含旧项目名、旧命令、旧仓库链接或过期说明。实际使用请以项目根目录的 `README.md`、`QUICK_START.md` 和 `docs/` 当前使用文档为准。
+
+
 **发布日期**: 2026-01-15
 **版本**: v5.0.0 (Stable Release) 🎉
 **GitHub**: https://github.com/LeoMengTCM/scopus-wos-tools

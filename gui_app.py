@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-MultiDatabase 文献计量工具 - 现代化GUI v5.0
+Bibliometric Data Consolidation Tool - 现代化GUI v5.1.0
 
 功能特点：
 - 🎨 现代化卡片式设计（支持滚动、窗口调整）
@@ -31,9 +31,6 @@ from tkinter import filedialog, messagebox
 import queue
 
 # 导入工作流模块
-# 导入工作流模块
-import sys
-import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 from bibliometrics.pipeline.workflow import AIWorkflow
 
@@ -759,13 +756,10 @@ class MultiDatabaseGUI:
                 self.log_queue.put(f"\n输出文件位置: {data_dir}")
                 self.log_queue.put("\n推荐使用文件:")
 
-                # 根据是否启用清洗确定最终文件
-                if self.enable_cleaning.get():
-                    final_file = "Final_Version.txt"
-                    report_file = "Final_Version_analysis_report.txt"
-                else:
-                    final_file = "english_only.txt"
-                    report_file = "english_only_analysis_report.txt"
+                # 根据实际工作流结果确定最终文件
+                analysis_file = workflow.cleaned_file if self.enable_cleaning.get() else workflow.filtered_file
+                final_file = analysis_file.name
+                report_file = f"{analysis_file.stem}_analysis_report.txt"
 
                 self.log_queue.put(f"  ⭐ {final_file} - 导入VOSviewer/CiteSpace")
                 if year_range:

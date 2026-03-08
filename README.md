@@ -1,441 +1,168 @@
 # Bibliometric Data Consolidation Tool
 
+English | [中文](README.zh-CN.md) | [日本語](README.ja.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-5.1.0-green.svg)](https://github.com/LeoMengTCM/LM_Bibliometrics/releases/tag/v5.1.0)
+[![Python 3](https://img.shields.io/badge/python-3-blue.svg)](https://www.python.org/)
+[![Version](https://img.shields.io/badge/version-5.1.0%2Blocal-green.svg)](CHANGELOG.md)
 
-一套专业的文献计量学数据处理工具，用于整合 Scopus 和 Web of Science (WOS) 数据库的文献数据，完美支持 CiteSpace、VOSviewer、Bibliometrix 等主流分析工具。
+A **WOS-guided Scopus→WOS conversion and consolidation system** for bibliometric analysis.
 
-> **🔥 v5.1.0 稳定版发布**（2026-02-01）：
-> - 🏗️ **架构重构** - 采用模块化 Python 包结构 (`src/bibliometrics`)
-> - 🔄 **项目更名** - 正式更名为 "Bibliometric Data Consolidation Tool"
-> - 🛡️ **隐私与安全** - 移除敏感信息，增强安全性
-> - 🗑️ **清理优化** - 移除冗余脚本，优化项目结构
+This repository is not positioned as a generic data-cleaning project. Its main job is to push Scopus records as close as possible to **Web of Science (WOS)** style, then merge WOS and Scopus into one unified, analysis-ready corpus.
 
-详见 [CHANGELOG.md](docs/release/CHANGELOG_v5.0.0.md)
+## Core goals
 
----
+1. Convert Scopus toward WOS style as far as the source data allows
+2. Use WOS as the primary alignment standard
+3. Deduplicate and merge WOS and Scopus consistently
+4. Let Scopus-only records blend naturally into a WOS-oriented corpus
+5. Output a unified database ready for tools such as **VOSviewer**, **CiteSpace**, and **Bibliometrix**
 
-## 🎯 项目概述
+## How the system works
 
-当您同时拥有**WOS**和**Scopus**的文献数据时，本工具可以帮您：
-1. ✅ 将Scopus CSV格式转换为标准WOS纯文本格式
-2. ✅ 智能合并两个数据库的数据
-3. ✅ 自动识别并去除重复文献
-4. ✅ 筛选指定语言的文献（如仅保留英文文献）
-5. ✅ 机构名称智能清洗和标准化
-6. ✅ 自动生成可视化图表和统计报告
-7. ✅ 创建标准化项目文件夹结构
+The pipeline combines **local rules**, **current-input WOS corpus calibration**, and optional AI steps.
 
-### 核心优势
-- **高精度转换**：95%+字段转换准确率
-- **智能去重**：基于DOI和标题的多策略匹配
-- **完美兼容**：支持VOSviewer、CiteSpace、Bibliometrix等工具
-- **数据完整**：WOS优先，Scopus补充，取两者之长
-- **开箱即用**：一行命令完成全部流程
-- **自动可视化**：生成高质量图表（300 DPI TIFF）
+- **Local structural conversion**: converts `scopus.csv` into WOS-style plain text records
+- **WOS-corpus calibration**: uses the current `wos.txt` as the reference style, especially for affiliation and organization alignment
+- **Conservative `C3` recovery**: calibrates missing companion / parent organizations from duplicate WOS/Scopus pairs, but only when the raw Scopus affiliation evidence supports the recovery
+- **WOS-first merge**: keeps the richer WOS record when WOS and Scopus duplicates are merged
+- **Optional AI branch**: adds journal / country normalization and institution enrichment when enabled
 
----
+## Important boundaries
 
-## 🚀 快速开始
+This project intentionally does **not** do the following:
 
-### 前置要求
-- Python 3.6+
-- 依赖库：
-  ```bash
-  pip3 install --break-system-packages requests pandas matplotlib seaborn
-  ```
-- WOS和Scopus导出的原始数据文件
+- It does **not** copy a matched WOS `C3` field directly into the converted Scopus record
+- It does **not** depend on an external institution authority database as the primary source of truth
+- It does **not** use duplicate pairs as a shortcut to overwrite Scopus record fields one by one
+- It does **not** reintroduce aggressive global co-occurrence filling that adds noisy companions everywhere
 
-### 💡 最简单的方式（AI增强工作流，推荐）⭐ NEW
+Duplicate WOS/Scopus pairs are used for **rule calibration and validation**, not for direct record-level field theft.
 
-只需一行命令：
+## Entry points
+
+Two equivalent CLI entry points are available:
+
+- `python3 run_ai_workflow.py ...` — compatibility entry, easiest to copy
+- `python3 scripts/run_workflow.py ...` — actual CLI entry
+
+If you prefer a GUI:
+
+- `python3 gui_app.py`
+- or double-click `启动GUI.command`
+
+## Reproducible example
+
+A bundled example dataset is included in `Example/`:
+
+```text
+Example/
+├── wos.txt
+└── scopus.csv
+```
+
+For a deterministic local review of the WOS-guided conversion and merge logic, run:
 
 ```bash
-python3 run_ai_workflow.py --data-dir "/你的数据文件夹路径"
+python3 run_ai_workflow.py --data-dir Example --no-ai
 ```
 
-**示例**：
+For the default workflow with the AI branch enabled:
+
 ```bash
-python3 run_ai_workflow.py --data-dir "/Users/xxx/Bibliometrics/My_Research_Project"
+python3 run_ai_workflow.py --data-dir Example
 ```
 
-### 🎯 自动完成的任务
+## Required input layout
 
-1. ✅ **格式转换** - Scopus CSV → WOS格式 + WOS标准化
-2. ✅ **批量并发处理** - 20线程，3分钟完成660篇
-3. ✅ **AI机构补全** - 州/省代码、邮编、部门信息
-4. ✅ **合并去重** - WOS + Scopus智能合并
-5. ✅ **语言筛选** - 英文文献筛选
-6. ✅ **机构清洗** - 机构名称标准化（减少20%冗余）
-7. ✅ **统计分析** - 生成详细分析报告
-8. ✅ **创建项目结构** - 标准化文件夹（Figures and Tables等）
-9. ✅ **生成可视化** - 文档类型分布图（PNG + TIFF）
+Your data directory must contain:
 
-### 📁 自动生成的项目结构
-
-```
-你的数据目录/
-├── Final_Version.txt                    # 🌟 最终分析文件
-├── Final_Version_analysis_report.txt    # 统计报告
-├── Figures and Tables/
-│   ├── 01 文档类型/
-│   │   ├── document_types.png          # 图表（预览）
-│   │   ├── document_types.tiff         # 高分辨率图表（300 DPI）
-│   │   ├── document_types_data.csv     # 原始数据
-│   │   └── plot_document_types.py      # 完整代码
-│   ├── 02 各年发文及引文量/
-│   ├── 03 期刊/
-│   ├── 04 被引期刊/
-│   ├── 05 机构/
-│   ├── 06 国家/
-│   ├── 07 作者/
-│   ├── 08 被引作者/
-│   ├── 09 参考文献/
-│   └── 10 关键词/
-├── data/                                # 原始数据存放
-├── project/                             # 项目文件存放
-├── scopus_converted_to_wos.txt         # 中间文件
-├── scopus_enriched.txt                 # AI补全后
-├── merged_deduplicated.txt             # 合并去重后
-├── english_only.txt                    # 语言筛选后
-└── ai_workflow_report.txt              # 工作流报告
+```text
+/path/to/your-data/
+├── wos.txt
+└── scopus.csv
 ```
 
-### 📊 性能指标（v4.1.0）
+## What `--no-ai` really means
 
-- ⚡ **处理速度**：3分钟（660篇）vs 70-80分钟（旧版）
-- 💰 **API调用**：297次 vs 7000+次（成本降低95%）
-- 📊 **数据库**：60个国家，237个期刊，1185个机构
-- 🎯 **机构清洗**：唯一机构数减少5-20%
-- 📈 **补全率**：93.5%（机构信息）
+`--no-ai` disables the **AI branch**, but it does **not** disable the local WOS-guided conversion logic.
 
----
+With `--no-ai`, the workflow still keeps:
 
-## 📁 项目结构
+- local Scopus → WOS-style conversion
+- local WOS-corpus calibration
+- local duplicate-aware `C3` recovery and plausibility guards
+- merge and deduplication
+- language filtering
+- institution cleaning
+- analysis and report generation
 
-```
-LM_Bibliometrics/
-├── run_ai_workflow.py             # 🌟 AI增强工作流（推荐）⭐ v4.1
-├── plot_document_types.py         # 📊 文档类型可视化 ⭐ NEW v4.1
-├── clean_institutions.py          # 🧹 机构清洗工具 ⭐ NEW v3.0
-├── enhanced_converter_batch_v2.py # ⚡ 批量并发转换器（20线程）
-├── enhanced_converter.py          # 增强转换器（含WOS标准化）
-├── scopus_to_wos_converter.py    # 基础转换器（Scopus → WOS）
-├── wos_standardizer_batch.py      # 批量WOS标准化引擎
-├── wos_standardizer.py            # WOS格式标准化引擎
-├── institution_enricher_v2.py     # AI机构信息补全系统
-├── gemini_enricher_v2.py          # Gemini API集成模块
-├── gemini_config.py               # Gemini配置文件
-├── merge_deduplicate.py           # WOS & Scopus 合并去重工具
-├── filter_language.py             # 语言筛选工具
-├── analyze_records.py             # 文献数据统计分析工具
-├── run_complete_workflow.py       # 完整工作流（传统方式）
-├── run_all.sh                     # 一键运行脚本（传统方式）
-├── config/                        # 配置文件目录
-│   ├── wos_standard_cache.json    # WOS标准化数据库
-│   ├── institution_ai_cache.json  # AI机构补全数据库
-│   ├── institution_cleaning_rules_ultimate.json  # 机构清洗规则
-│   ├── country_mapping.json       # 国家名称标准化配置
-│   ├── biomedical_institutions.json  # 生物医学机构配置
-│   ├── institution_config.json    # 机构识别配置
-│   └── journal_abbrev.json        # 期刊缩写配置
-├── docs/                          # 中文文档目录
-├── examples/                      # 示例和报告
-├── QUICK_START.md                 # 快速开始指南
-├── CLAUDE.md                      # 项目开发指南
-├── CHANGELOG.md                   # 更新日志
-└── README.md                      # 本文件
-```
+It skips:
 
----
+- AI-based WOS-style normalization
+- AI-based institution enrichment
 
-## 💡 工作原理
+## Main outputs
 
-### 完整流程（v4.1）
+Depending on options, the workflow typically produces:
 
-```
-输入文件:
-├── wos.txt          (WOS原始数据)
-└── scopus.csv       (Scopus原始数据)
-         ↓
-    [步骤1: 格式转换 + WOS标准化]
-    enhanced_converter_batch_v2.py (20线程并发)
-         ↓
-    scopus_converted_to_wos.txt
-         ↓
-    [步骤2: AI机构信息补全]
-    institution_enricher_v2.py
-         ↓
-    scopus_enriched.txt
-         ↓
-    [步骤3: 合并去重]
-    merge_deduplicate.py
-         ↓
-    merged_deduplicated.txt
-         ↓
-    [步骤4: 语言筛选]
-    filter_language.py
-         ↓
-    english_only.txt
-         ↓
-    [步骤5: 机构清洗]
-    clean_institutions.py
-         ↓
-    Final_Version.txt  🌟
-         ↓
-    [步骤6: 统计分析]
-    analyze_records.py
-         ↓
-    [步骤7: 创建项目结构]
-    自动创建文件夹
-         ↓
-    [步骤8: 生成可视化]
-    plot_document_types.py
-         ↓
-输出:
-├── Final_Version.txt (最终分析文件)
-├── Figures and Tables/ (图表和数据)
-├── data/ (原始数据)
-└── project/ (项目文件)
-```
+- `scopus_converted_to_wos.txt`
+- `scopus_enriched.txt`
+- `merged_deduplicated.txt`
+- `english_only.txt` or another language-filtered file
+- `Final_Version.txt`
+- `*_analysis_report.txt`
+- `ai_workflow_report.txt`
+- `Figures and Tables/`
 
----
+## Current validation snapshot
 
-## 📊 导入分析工具
+The bundled example has been rerun locally through the full workflow and reviewed on duplicate WOS/Scopus pairs.
+
+- Input pair: `Example/wos.txt` + `Example/scopus.csv`
+- Focus: conservative `C3` alignment and companion recovery
+- Current local review snapshot: duplicate-pair `C3` differences on 100 overlapping pairs improved from `24` to `12` by round11 iteration
+
+This validation is used to refine general rules in `src/bibliometrics/converters/scopus.py`, not to hard-copy WOS fields into Scopus outputs.
+
+## Documentation map
+
+Start here for current usage:
+
+- `QUICK_START.md`
+- `QUICK_START.zh-CN.md`
+- `QUICK_START.ja.md`
+- `PROJECT_STRUCTURE.md`
+- `docs/README.md`
+- `docs/WOS标准化说明.md`
+- `docs/Scopus数据质量问题分析.md`
+
+Historical notes under `docs/changelogs/`, `docs/release/`, and `docs/security/` are kept for context but may contain older wording or workflow details.
+
+## Import into analysis tools
 
 ### VOSviewer
-```
-1. File → Create → Based on bibliographic data
-2. Database: Web of Science
-3. 选择文件: Final_Version.txt
-4. 开始分析
-```
+
+Import the final WOS-style plain text file such as `Final_Version.txt`.
 
 ### CiteSpace
-```
-1. New Project → Data Source: Web of Science
-2. Import → 选择 Final_Version.txt
-3. 开始分析
-```
 
-### Bibliometrix (R)
-```R
+Use the WOS plain text import mode and select the final output file.
+
+### Bibliometrix
+
+```r
 library(bibliometrix)
-M <- convert2df("Final_Version.txt",
-                dbsource = "wos",
-                format = "plaintext")
+M <- convert2df("Final_Version.txt", dbsource = "wos", format = "plaintext")
 results <- biblioAnalysis(M)
 ```
 
----
+## Notes
 
-## ✨ 核心特性
+- If AI is enabled, configure `GEMINI_API_KEY` first
+- If you want reproducible local conversion review, prefer `--no-ai`
+- The default institution-cleaning rules file is `config/institution_cleaning_rules_ultimate.json`
 
-### 1. AI增强处理（v4.0+）
+## License
 
-| 功能 | 说明 | 性能 |
-|------|------|------|
-| **批量并发** | 20线程并发处理 | 20-30倍速度提升 |
-| **WOS标准化** | 国家名、期刊名AI标准化 | 60国家，237期刊 |
-| **机构补全** | 州/省代码、邮编、部门 | 93.5%补全率 |
-| **数据库记忆** | 首次AI学习，后续即时调用 | 98倍速度提升 |
-
-### 2. 机构清洗（v3.0+）
-
-| 功能 | 效果 |
-|------|------|
-| **噪音移除** | 去除无效机构名 |
-| **父子合并** | 合并同一机构的不同表述 |
-| **部门处理** | 移除独立部门，保留主机构 |
-| **标准化** | 统一机构名称格式 |
-| **去重效果** | 唯一机构数减少5-20% |
-
-### 3. 自动可视化（v4.1+）
-
-| 功能 | 输出 |
-|------|------|
-| **文档类型分布** | PNG + TIFF（300 DPI） |
-| **数据导出** | CSV格式原始数据 |
-| **代码保存** | 完整Python代码 |
-| **三数据库对比** | WOS + Scopus + Final |
-
-### 4. 智能字段转换
-
-| 功能 | 说明 |
-|------|------|
-| **作者处理** | 自动处理作者缩写，去除Scopus ID |
-| **机构提取** | 智能识别一级机构，自动缩写 |
-| **C3字段** | 提取一级机构用于统计分析 |
-| **参考文献** | 解析Scopus参考文献格式 |
-
----
-
-## 🔧 高级用法
-
-### 命令行参数
-
-```bash
-# 基本使用
-python3 run_ai_workflow.py --data-dir "/path/to/data"
-
-# 筛选中文文献
-python3 run_ai_workflow.py --data-dir "/path/to/data" --language Chinese
-
-# 禁用AI补全
-python3 run_ai_workflow.py --data-dir "/path/to/data" --no-ai
-
-# 禁用机构清洗
-python3 run_ai_workflow.py --data-dir "/path/to/data" --no-cleaning
-
-# 使用自定义清洗规则
-python3 run_ai_workflow.py --data-dir "/path/to/data" \
-    --cleaning-config config/my_rules.json
-
-# 调整日志级别
-python3 run_ai_workflow.py --data-dir "/path/to/data" --log-level DEBUG
-```
-
-### 自定义配置
-
-#### 1. 自定义期刊缩写
-编辑 `config/journal_abbrev.json`：
-```json
-{
-  "Your Journal Name": "YOUR ABBREV",
-  "Nature Medicine": "NAT MED"
-}
-```
-
-#### 2. 自定义机构清洗规则
-编辑 `config/institution_cleaning_rules_ultimate.json`：
-```json
-{
-  "noise_patterns": ["^Email:", "^Corresponding"],
-  "parent_child_pairs": {
-    "Harvard University": ["Harvard Medical School"]
-  }
-}
-```
-
----
-
-## 📚 详细文档
-
-- [QUICK_START.md](QUICK_START.md) - 快速开始指南（新手必读）
-- [CLAUDE.md](CLAUDE.md) - 项目开发指南和架构说明
-- [CHANGELOG.md](CHANGELOG.md) - 完整更新日志
-- [LICENSE](LICENSE) - MIT开源许可证
-
----
-
-## 🛠️ 系统要求
-
-- **Python**: 3.6+
-- **操作系统**: Windows / macOS / Linux
-- **依赖库**: requests, pandas, matplotlib, seaborn
-- **内存**: 建议1GB+
-- **磁盘**: 根据数据量，通常<200MB
-
----
-
-## 📝 更新日志
-
-### v5.0.0 (2026-01-15) - 稳定版发布 🎉
-- ✅ **API速率限制修复**：彻底解决429错误，并发从50降到5，请求频率降低94%
-- ✅ **C1格式修复**：AI补全后国家始终在最后独立位置
-- ✅ **C3人名过滤**：移除机构字段中的人名（如"Smith, J"）
-- ✅ **GUI显示修复**：窗口自适应、滚动支持、绘图时机优化
-- ✅ **WOS格式对齐**：Scopus独有记录自动对齐WOS标准
-- ✅ **年份优先过滤**：在源头过滤异常年份（Early Access、历史引用）
-- 🎨 **图形界面**：现代化GUI界面，一键式操作
-- 📦 **项目成熟**：代码无遗留TODO，功能完整稳定
-
-### v4.1.0 (2025-11-12)
-- ✨ 新增自动可视化功能（文档类型分布图）
-- ✨ 新增项目文件夹结构自动创建
-- ✨ 统一最终文件命名为 `Final_Version.txt`
-- ✨ 图表自动保存为PNG和TIFF格式（300 DPI）
-- ✨ 每个图表附带完整Python代码
-- ✅ 优化项目架构和文档
-
-### v4.0.1 (2025-11-11)
-- ⚡ 批量并发处理（20线程，3分钟完成660篇）
-- ✅ WOS格式标准化（60国家，237期刊）
-- ✅ AI机构信息补全（93.5%补全率）
-- 💰 成本优化（297次API调用 vs 7000+）
-
-### v3.0 (2025-11-10)
-- ✨ 新增机构清洗功能
-- ✅ 智能合并父子机构
-- ✅ 移除噪音和独立部门
-- ✅ 唯一机构数减少5-20%
-
----
-
-## 🤝 贡献
-
-欢迎提交Issue和Pull Request！
-
-### 改进方向
-- [ ] 更多可视化图表（年份趋势、国家分布等）
-- [ ] 增强参考文献解析精度
-- [ ] 支持更多数据库格式（Dimensions, PubMed等）
-- [ ] 添加GUI界面
-- [ ] Web在线版本
-
----
-
-## 📄 许可证
-
-MIT License - 可自由使用、修改、分发
-
----
-
-## 🙏 致谢
-
-感谢以下资源和工具：
-- [Clarivate Analytics](https://clarivate.com/) - Web of Science
-- [Elsevier](https://www.elsevier.com/) - Scopus
-- [CiteSpace](http://cluster.cis.drexel.edu/~cchen/citespace/) - 文献计量分析工具
-- [VOSviewer](https://www.vosviewer.com/) - 可视化分析工具
-- [Bibliometrix](https://www.bibliometrix.org/) - R语言文献计量包
-- [Anthropic Claude](https://www.anthropic.com/) - AI开发助手
-
----
-
-## 📧 联系方式
-
-- **作者**: Meng Linghan
-- **开发工具**: Claude Code
-- **版本**: v5.0.0 (Stable Release)
-- **日期**: 2026-01-15
-- **GitHub**: [LM_Bibliometrics](https://github.com/LeoMengTCM/LM_Bibliometrics)
-
----
-
-## 🌟 使用场景示例
-
-### 场景1：完整的文献计量分析项目
-```bash
-python3 run_ai_workflow.py --data-dir "/path/to/data"
-# 自动完成所有处理，生成Final_Version.txt和可视化图表
-# 直接导入VOSviewer/CiteSpace开始分析
-```
-
-### 场景2：仅有Scopus数据想用WOS工具分析
-```bash
-python3 scopus_to_wos_converter.py scopus.csv output.txt
-# 转换后可直接导入VOSviewer等WOS格式工具
-```
-
-### 场景3：需要高质量图表用于论文发表
-```bash
-python3 run_ai_workflow.py --data-dir "/path/to/data"
-# 在 Figures and Tables/01 文档类型/ 中获取300 DPI TIFF图表
-# 直接用于论文投稿
-```
-
----
-
-**开始您的文献计量分析之旅吧！** 🚀📊✨
+MIT

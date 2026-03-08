@@ -1,6 +1,6 @@
 # Scopus转WOS AI补全系统 - 完整总结报告
 
-**项目**: scopus-wos-tools
+**项目**: Bibliometric-Data-Consolidation-Tool
 **版本**: v4.0.1 (批量并发优化版)
 **日期**: 2025-11-11
 **开发工具**: Claude Code + Gemini API
@@ -222,7 +222,7 @@ python3 filter_language.py merged.txt english_only.txt --language English
 
 ```bash
 # 未来版本：集成AI补全到完整工作流
-python3 run_complete_workflow.py \
+python3 run_ai_workflow.py \
     --data-dir "/path/to/data" \
     --enrich \
     --language English
@@ -232,7 +232,7 @@ python3 run_complete_workflow.py \
 
 ## 📁 生成的所有文件
 
-### 在项目目录 (`/Users/menglinghan/Desktop/scopus-wos-tools/`)
+### 在项目目录 (`/path/to/Bibliometric-Data-Consolidation-Tool/`)
 
 #### 核心代码文件
 1. ✅ `gemini_config.py` - Gemini API配置模块
@@ -417,7 +417,7 @@ AI调用: 25次
 ### 短期（1-2周）
 
 1. **集成到完整工作流**
-   - 在 `run_complete_workflow.py` 中添加 `--enrich` 选项
+   - 在 `run_ai_workflow.py` 中添加 `--enrich` 选项
    - 一键完成所有步骤
 
 2. **优化提示词**
@@ -531,7 +531,7 @@ python3 institution_enricher_v2.py \
 A: 等待配额重置（通常每天重置），或使用付费API（成本极低）
 
 **Q2: 如何切换到flash-lite？**
-A: 添加 `--model gemini-2.5-flash-lite` 参数
+A: 当前主工作流 CLI 不提供 `--model` 参数；如需切换模型，请通过环境变量或单独调用底层 AI 组件。
 
 **Q3: 数据库在哪里？**
 A: `config/institution_ai_cache.json`

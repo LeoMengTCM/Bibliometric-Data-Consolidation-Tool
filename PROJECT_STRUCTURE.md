@@ -1,275 +1,172 @@
-# MultiDatabase 项目结构说明
+# 项目结构说明
 
-**版本**: v4.3.0 (Modern UI)
-**更新日期**: 2025-11-14
+**当前定位**：以 WOS 为主标准的 Scopus→WOS 转换与整合系统  
+**当前文档状态**：post-5.1.0 本地迭代  
+**更新日期**：2026-03-07
 
----
+## 项目概览
 
-## 📁 项目结构
+本项目的目标不是做“泛化清洗”，而是围绕以下主线持续迭代：
 
-```
-MultiDatabase/
-├── 📄 README.md                          # 项目主文档
-├── 📄 CLAUDE.md                          # AI助手使用指南（供Claude Code使用）
-├── 📄 CHANGELOG.md                       # 版本更新日志
-├── 📄 PROJECT_STRUCTURE.md               # 项目结构说明（本文件）
-│
-├── 🖥️  gui_app.py                         # ⭐ 现代化GUI界面（推荐使用）
-│
-├── 🔧 核心工作流脚本/
-│   ├── run_ai_workflow.py                # ⭐ AI增强工作流（推荐）
-│   └── run_complete_workflow.py          # 传统完整工作流
-│
-├── 🔄 数据处理脚本/
-│   ├── enhanced_converter_batch_v2.py    # 批量转换器（20线程，推荐）
-│   ├── enhanced_converter.py             # 增强转换器（单线程）
-│   ├── scopus_to_wos_converter.py        # 基础转换器
-│   ├── institution_enricher_v2.py        # AI机构信息补全
-│   ├── merge_deduplicate.py              # 合并与去重
-│   ├── filter_language.py                # 语言筛选
-│   ├── filter_by_year.py                 # 年份范围筛选
-│   ├── clean_institutions.py             # 机构名称智能清洗
-│   └── analyze_records.py                # 统计分析
-│
-├── 📊 可视化脚本/
-│   ├── plot_document_types.py            # 文档类型分析图表
-│   └── plot_publications_citations.py    # 年度发文量及引用量图表
-│
-├── 🧩 辅助模块/
-│   ├── wos_standardizer_batch.py         # 批量WOS标准化
-│   ├── wos_standardizer.py               # WOS标准化引擎
-│   ├── gemini_enricher_v2.py             # Gemini AI接口封装
-│   └── gemini_config.py                  # Gemini API配置
-│
-├── ⚙️  config/                            # 配置文件夹
-│   ├── wos_standard_cache.json           # WOS标准化缓存数据库
-│   ├── institution_ai_cache.json         # AI补全缓存数据库
-│   ├── author_database.json              # 作者标准化数据库
-│   ├── country_mapping.json              # 国家名称映射表
-│   ├── journal_abbrev.json               # 期刊名称缩写表
-│   ├── institution_config.json           # 机构处理配置
-│   ├── institution_knowledge_base.json   # 机构知识库
-│   ├── biomedical_institutions.json      # 生物医学机构列表
-│   ├── institution_cleaning_rules_ultimate.json  # 终极清洗规则
-│   └── institution_cleaning_rules_enhanced.json  # 增强清洗规则
-│
-└── 📚 docs/                               # 详细文档
-    ├── 快速使用指南.md                   # 新手快速入门
-    ├── 使用指南.md                       # 完整使用手册
-    ├── 数据准备说明.md                   # 输入数据准备
-    ├── 机构清洗使用指南.md               # 机构清洗功能详解
-    ├── 年份过滤使用指南.md               # 年份筛选功能说明
-    ├── AI补全系统完整总结.md             # AI补全系统详解
-    ├── WOS标准化说明.md                  # WOS标准化功能说明
-    └── Scopus数据质量问题分析.md         # Scopus数据质量分析
+- 尽可能把 Scopus 转成 WOS 风格
+- 用当前输入的 `wos.txt` 作为主要参考标准
+- 通过重复 WOS/Scopus 记录校准转换规则
+- 做好去重与合并
+- 输出统一、可直接用于文献计量分析的最终数据库
+
+## 根目录结构
+
+```text
+.
+├── README.md
+├── README.zh-CN.md
+├── README.ja.md
+├── QUICK_START.md
+├── QUICK_START.zh-CN.md
+├── QUICK_START.ja.md
+├── CHANGELOG.md
+├── PROJECT_STRUCTURE.md
+├── run_ai_workflow.py
+├── gui_app.py
+├── 启动GUI.command
+├── Example/
+├── scripts/
+│   └── run_workflow.py
+├── src/
+│   └── bibliometrics/
+├── config/
+├── docs/
+└── archive/
 ```
 
----
+## 核心入口
 
-## 🚀 快速开始
+- `run_ai_workflow.py`：兼容入口，推荐直接复制命令时使用
+- `scripts/run_workflow.py`：实际 CLI 入口
+- `gui_app.py`：图形界面入口
+- `启动GUI.command`：macOS 下的 GUI 快捷入口
 
-### 方式1：使用GUI（推荐）⭐
+## 示例与验证目录
 
-```bash
-python3 gui_app.py
-```
+- `Example/`：仓库自带可复现实例，包含 `wos.txt` 与 `scopus.csv`
+- `tmp_review_round*/`：本地迭代验证输出目录，用于对照每一轮规则调整后的结果
+- `tmp_review_probe_*/`：局部探针验证目录，用于快速验证特定规则或异常案例
 
-- ✅ 现代化界面，操作简单
-- ✅ 实时进度显示
-- ✅ 详细日志输出
-- ✅ 参数配置方便
+这些 `tmp_review_*` 目录属于**本地审阅产物**，不是面向最终用户的稳定接口文档。
 
-### 方式2：使用命令行
+## 源码目录
 
-```bash
-python3 run_ai_workflow.py \
-  --data-dir "/path/to/data" \
-  --year-range 2015-2024
-```
+核心代码位于 `src/bibliometrics/`。
 
----
+### `src/bibliometrics/converters/`
 
-## 📖 核心功能
+与当前项目定位最相关的目录。
 
-### 1. 格式转换
-- **Scopus CSV → WOS 纯文本**
-- 批量并发处理（20线程）
-- WOS标准化（国家、期刊、作者）
+- `src/bibliometrics/converters/scopus.py`：Scopus → WOS 风格转换主逻辑
+- `src/bibliometrics/converters/batch.py`：批处理转换逻辑
+- `src/bibliometrics/converters/author_database.py`：作者标准化辅助数据库逻辑
 
-### 2. AI智能补全
-- 州/省代码自动补全
-- 邮政编码自动补全
-- 部门信息自动补全
-- Gemini AI驱动
+当前 round 迭代中，`src/bibliometrics/converters/scopus.py` 是最关键文件，尤其集中在：
 
-### 3. 合并去重
-- 基于DOI的精确匹配
-- 基于标题的模糊匹配
-- WOS数据优先策略
+- WOS 语料校准
+- `C3` 选择与补充
+- companion / parent 级机构恢复
+- affiliation 映射合理性保护
 
-### 4. 数据筛选
-- 语言筛选（English/Chinese等）
-- 年份范围筛选（如2015-2024）
-- 自动去除早期访问文章
+### `src/bibliometrics/pipeline/`
 
-### 5. 机构清洗
-- 合并重复机构
-- 移除噪音词
-- 标准化格式
-- 3级清洗规则（basic/enhanced/ultimate）
+- 主工作流编排
+- WOS / Scopus 合并与去重调度
+- 各步骤衔接
 
-### 6. 统计分析
-- 国家/地区分布
-- 高产机构Top 20
-- 年度发文趋势
-- 国际合作网络
+### `src/bibliometrics/standardizers/`
 
-### 7. 可视化图表
-- 文档类型分析（Article/Review）
-- 年度发文量趋势
-- 年度引用量趋势
-- 发文量与引用量对比
+- WOS 风格标准化
+- AI / Gemini 相关标准化与补全
+- 机构名称清洗与标准化
 
----
+### `src/bibliometrics/filters/`
 
-## 📦 输出文件说明
+- 语言筛选
+- 年份范围筛选
 
-### 主要输出文件
+### `src/bibliometrics/analysis/`
 
-| 文件名 | 说明 | 用途 |
-|--------|------|------|
-| `scopus_converted_to_wos.txt` | Scopus转WOS格式 | 中间文件 |
-| `scopus_enriched.txt` | AI补全后的数据 | 中间文件 |
-| `merged_deduplicated.txt` | 合并去重后 | 中间文件 |
-| `english_only.txt` | 语言筛选后 | 中间文件 |
-| `Final_Version.txt` | 机构清洗后 | 中间文件 |
-| `Final_Version_Year_Filtered.txt` | ⭐ 最终版本 | **导入分析工具** |
-| `data/download_final_data.txt` | 最终数据副本 | 直接分析用 |
+- 文献统计分析
+- 图表生成
+- 分析报告
 
-### 分析报告
+### `src/bibliometrics/utils/`
 
-| 文件名 | 说明 |
-|--------|------|
-| `ai_workflow_report.txt` | 完整工作流报告 |
-| `Final_Version_Year_Filtered_analysis_report.txt` | 统计分析报告 |
+- 路径工具
+- 限流与辅助函数
+- 其他通用工具
 
-### 图表输出
+## 配置目录
 
-```
-Figures and Tables/
-├── 01 文档类型/
-│   ├── document_types.tiff/png
-│   └── document_types_data.csv
-│
-└── 02 各年发文及引文量/
-    ├── 各年发文量.tiff/png
-    ├── 各年引用量.tiff/png
-    ├── 各年发文量及引用量.tiff/png
-    └── publications_citations_data.csv
-```
+`config/` 中主要包含：
 
----
+- `institution_cleaning_rules_ultimate.json`：默认机构清洗规则
+- `country_mapping.json`：国家名称映射
+- `journal_abbrev.json`：期刊缩写映射
+- `biomedical_institutions.json`：机构知识数据
+- 各类缓存文件：AI 或标准化阶段生成并复用
 
-## 🔧 配置文件说明
+## 当前使用文档
 
-### 缓存数据库（自动生成）
-- `wos_standard_cache.json` - WOS标准化缓存（作者、国家、期刊）
-- `institution_ai_cache.json` - AI补全缓存（机构信息）
-- `author_database.json` - 作者名称标准化缓存
+### 根目录入口
 
-### 映射表（预配置）
-- `country_mapping.json` - 46个国家名称映射规则
-- `journal_abbrev.json` - 50+期刊名称缩写
-- `biomedical_institutions.json` - 生物医学机构识别
+- `README.md`
+- `README.zh-CN.md`
+- `README.ja.md`
+- `QUICK_START.md`
+- `QUICK_START.zh-CN.md`
+- `QUICK_START.ja.md`
+- `CHANGELOG.md`
+- `PROJECT_STRUCTURE.md`
 
-### 清洗规则（可选择）
-- `institution_cleaning_rules_ultimate.json` - ⭐ 终极清洗（推荐）
-- `institution_cleaning_rules_enhanced.json` - 增强清洗
-- `institution_knowledge_base.json` - 机构知识库
+### `docs/` 当前建议阅读
 
----
+- `docs/README.md`
+- `docs/快速使用指南.md`
+- `docs/使用指南.md`
+- `docs/数据准备说明.md`
+- `docs/WOS标准化说明.md`
+- `docs/Scopus数据质量问题分析.md`
+- `docs/年份过滤使用指南.md`
+- `docs/机构清洗使用指南.md`
 
-## 📝 文档导航
+### `docs/` 历史或背景材料
 
-### 新手入门
-1. 阅读 `docs/快速使用指南.md`
-2. 准备数据（参考 `docs/数据准备说明.md`）
-3. 运行GUI：`python3 gui_app.py`
+- `docs/AI补全系统完整总结.md`
+- `docs/changelogs/`
+- `docs/release/`
+- `docs/security/`
+- `docs/internal/`
 
-### 进阶使用
-- 命令行工作流：`docs/使用指南.md`
-- 机构清洗：`docs/机构清洗使用指南.md`
-- 年份筛选：`docs/年份过滤使用指南.md`
-- AI补全：`docs/AI补全系统完整总结.md`
+这些目录和文档保留原始上下文，可能出现旧版本术语、旧流程或旧命令，不应和“当前使用文档”混用。
 
-### 技术参考
-- WOS标准化：`docs/WOS标准化说明.md`
-- 数据质量：`docs/Scopus数据质量问题分析.md`
-- 开发指南：`CLAUDE.md`
-- 更新日志：`CHANGELOG.md`
+## 推荐阅读顺序
 
----
+1. `README.zh-CN.md` / `README.md` / `README.ja.md`
+2. `QUICK_START.zh-CN.md` / `QUICK_START.md` / `QUICK_START.ja.md`
+3. `docs/README.md`
+4. `docs/WOS标准化说明.md`
+5. `docs/Scopus数据质量问题分析.md`
+6. `docs/使用指南.md`
 
-## 🎯 推荐工作流
+## 方法边界
 
-```
-1. 准备数据
-   └─> wos.txt + scopus.csv
+为避免误解，当前系统明确遵循以下边界：
 
-2. 运行GUI
-   └─> python3 gui_app.py
+- 不是普通“机构清洗项目”
+- 不是纯靠外部数据库查表
+- 不是按重复 DOI 直接复制 WOS 字段
+- 是基于**本地规则 + 当前 WOS 输入校准 + 原始 Scopus affiliation 证据**的保守转换与整合流程
 
-3. 配置参数
-   ├─> 年份范围: 2015-2024
-   ├─> 语言: English
-   ├─> 清洗规则: ultimate
-   ├─> 启用 AI 补全
-   ├─> 启用机构清洗
-   └─> 启用图表生成
+## 仓库整洁约定
 
-4. 开始处理
-   └─> 等待完成（3-5分钟）
-
-5. 使用结果
-   ├─> Final_Version_Year_Filtered.txt → VOSviewer/CiteSpace
-   ├─> analysis_report.txt → 论文写作参考
-   └─> Figures and Tables/ → 论文图表
-```
-
----
-
-## 💡 常见问题
-
-### Q: 哪个文件是最终用于分析的？
-**A:** `Final_Version_Year_Filtered.txt` 或 `data/download_final_data.txt`（内容相同）
-
-### Q: 如何修改年份范围？
-**A:** GUI中修改"年份范围"，或命令行使用 `--year-range 2015-2024`
-
-### Q: AI补全费用是多少？
-**A:** 首次运行约 ¥0.14/1000篇，后续运行免费（使用缓存）
-
-### Q: 如何选择清洗规则？
-**A:**
-- `ultimate` - 最彻底，推荐用于论文投稿
-- `enhanced` - 平衡，日常使用
-- 不启用清洗 - 保持原始数据
-
-### Q: 图表生成失败怎么办？
-**A:** 检查是否安装 `matplotlib` 和 `pandas`：
-```bash
-pip3 install matplotlib pandas
-```
-
----
-
-## 📞 技术支持
-
-- **GitHub Issues**: [报告问题](https://github.com/your-repo/issues)
-- **文档**: 查看 `docs/` 目录
-- **AI助手**: CLAUDE.md（供Claude Code使用）
-
----
-
-**版权所有 © 2025 Meng Linghan**
-**开发工具：Claude Code**
+- `__pycache__/`、`*.pyc` 不应纳入版本控制
+- macOS 资源分叉文件 `._*` 不应纳入版本控制
+- `tmp_review_*` 属于本地验证输出，应与源码和正式文档区分管理
+- 当前实际命令入口以 `run_ai_workflow.py` 和 `scripts/run_workflow.py` 为准

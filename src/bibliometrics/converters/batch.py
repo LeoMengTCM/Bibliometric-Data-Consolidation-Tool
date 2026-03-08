@@ -36,21 +36,30 @@ class EnhancedConverterBatchV2:
     """增强版转换器（批量并发版 v2.0 - 只标准化国家和期刊）"""
 
     def __init__(self, input_file: str, output_file: str, enable_standardization: bool = True,
-                 max_workers: int = 5, batch_size: int = 20):
+                 max_workers: int = 5, batch_size: int = 20, reference_wos_file: Optional[str] = None):
         self.input_file = input_file
         self.output_file = output_file
         self.enable_standardization = enable_standardization
+        self.reference_wos_file = reference_wos_file
 
         # 创建基础转换器
-        self.converter = ScopusToWosConverter(input_file, output_file)
+        self.converter = ScopusToWosConverter(
+            input_file,
+            output_file,
+            reference_wos_file=reference_wos_file,
+        )
 
         # 创建WOS标准化器（批量并发版，降低并发数避免429错误）
         if enable_standardization:
             config = GeminiConfig.from_params(
-                api_key=os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY'),
+                api_key=os.getenv('GEMINI_API_KEY'),
                 api_url=os.getenv('GEMINI_API_URL', 'https://your-api-gateway.com/proxy/bibliometrics/v1beta'),
                 model='gemini-2.5-flash-lite'
             )
+
+            if not config.validate():
+                raise ValueError("WOS标准化需要有效的 Gemini API 配置，请设置 GEMINI_API_KEY")
+
             self.standardizer = WOSStandardizerBatch(
                 config,
                 max_workers=max_workers,

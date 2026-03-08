@@ -27,6 +27,13 @@ import argparse
 from pathlib import Path
 from typing import Dict, Optional
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
 # 导入各个模块
 from ..converters.batch import EnhancedConverterBatchV2
 from ..standardizers.enrichment import InstitutionEnricherV2
@@ -35,20 +42,17 @@ from .merge import MergeDeduplicateTool
 from ..filters.language import LanguageFilter
 from ..analysis.records import RecordAnalyzer
 from ..standardizers.institutions import InstitutionCleaner
-try:
-    from ..analysis.plot_types import generate_all_figures
-    PLOT_AVAILABLE = True
-except ImportError:
-    PLOT_AVAILABLE = False
-    logger.warning("plot_document_types 模块未找到，图表生成功能将被禁用")
 from ..filters.year import YearFilter
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+
+def load_generate_all_figures():
+    """按需加载绘图模块，避免 CLI 启动时额外初始化 matplotlib。"""
+    try:
+        from ..analysis.plot_types import generate_all_figures
+        return generate_all_figures
+    except ImportError as exc:
+        logger.warning(f"plot_types 模块未找到，图表生成功能将被禁用: {exc}")
+        return None
 
 
 class AIWorkflow:
@@ -64,20 +68,20 @@ class AIWorkflow:
             data_dir: 数据目录（包含wos.txt和scopus.csv）
             language: 目标语言（默认English）
             enable_ai: 是否启用AI补全（默认True）
-            enable_cleaning: 是否启用机构清洗（默认True）⭐ NEW
-            cleaning_config: 清洗规则配置文件（默认使用增强版）⭐ NEW
-            year_range: 年份范围过滤（格式: YYYY-YYYY，如2015-2024）⭐ NEW
-            enable_plot: 是否生成图表（默认True）⭐ NEW
-            progress_callback: 进度回调函数，接收(step_name: str, progress: float)参数 ⭐ GUI支持
+            enable_cleaning: 是否启用机构清洗（默认True）
+            cleaning_config: 清洗规则配置文件（默认使用终极版规则）
+            year_range: 年份范围过滤（格式: YYYY-YYYY，如2015-2024）
+            enable_plot: 是否生成图表（默认True）
+            progress_callback: 进度回调函数，接收(step_name: str, progress: float)参数
         """
         self.data_dir = Path(data_dir)
         self.language = language
         self.enable_ai = enable_ai
         self.enable_cleaning = enable_cleaning
-        self.enable_plot = enable_plot  # ⭐ 新增：是否生成图表
+        self.enable_plot = enable_plot
         self.cleaning_config = cleaning_config
         self.year_range = year_range
-        self.progress_callback = progress_callback  # ⭐ 新增：进度回调
+        self.progress_callback = progress_callback
 
         # 定义文件路径
         self.wos_file = self.data_dir / 'wos.txt'
@@ -91,7 +95,7 @@ class AIWorkflow:
         self.scopus_enriched = self.data_dir / 'scopus_enriched.txt'
         self.merged_file = self.data_dir / 'merged_deduplicated.txt'
         self.filtered_file = self.data_dir / f'{language.lower()}_only.txt'
-        self.cleaned_file = self.data_dir / 'Final_Version.txt'  # ⭐ 清洗后的文件
+        self.cleaned_file = self.data_dir / 'Final_Version.txt'
         self.report_file = self.data_dir / 'ai_workflow_report.txt'
 
         # 统计信息
@@ -129,7 +133,7 @@ class AIWorkflow:
         return True
 
     def step1_filter_wos_by_year(self) -> bool:
-        """步骤1: 年份范围过滤WOS数据（如果启用）⭐ NEW"""
+        """步骤1: 年份范围过滤WOS数据（如果启用）"""
         logger.info("=" * 80)
         logger.info("步骤1: 年份范围过滤WOS数据")
         logger.info("=" * 80)
@@ -192,7 +196,7 @@ class AIWorkflow:
             return False
 
     def step2_filter_scopus_by_year(self) -> bool:
-        """步骤2: 年份范围过滤Scopus CSV数据（如果启用）⭐ NEW"""
+        """步骤2: 年份范围过滤Scopus CSV数据（如果启用）"""
         logger.info("=" * 80)
         logger.info("步骤2: 年份范围过滤Scopus数据")
         logger.info("=" * 80)
@@ -286,16 +290,22 @@ class AIWorkflow:
             # 如果启用了年份过滤，使用过滤后的文件；否则使用原始文件
             input_file = self.scopus_year_filtered if self.year_range else self.scopus_file
 
+            reference_wos_file = self.wos_year_filtered if self.year_range else self.wos_file
+
             converter = EnhancedConverterBatchV2(
                 str(input_file),
                 str(self.scopus_converted),
-                enable_standardization=True,
+                enable_standardization=self.enable_ai,
                 max_workers=20,
-                batch_size=50
+                batch_size=50,
+                reference_wos_file=str(reference_wos_file)
             )
             converter.convert()
 
-            logger.info(f"✓ 转换完成（已WOS标准化）: {self.scopus_converted}")
+            if self.enable_ai:
+                logger.info(f"✓ 转换完成（已WOS标准化）: {self.scopus_converted}")
+            else:
+                logger.info(f"✓ 转换完成（未启用AI标准化）: {self.scopus_converted}")
             logger.info("")
 
             self.stats['steps'].append({
@@ -333,7 +343,7 @@ class AIWorkflow:
         try:
             # 创建Gemini配置
             config = GeminiConfig.from_params(
-                api_key=os.getenv('GEMINI_API_KEY', 'YOUR_API_KEY'),
+                api_key=os.getenv('GEMINI_API_KEY'),
                 api_url=os.getenv('GEMINI_API_URL', 'https://your-api-gateway.com/proxy/bibliometrics/v1beta'),
                 model='gemini-2.5-flash-lite'
             )
@@ -402,10 +412,10 @@ class AIWorkflow:
 
             # 获取统计信息
             stats = {
-                'wos_count': len(tool.wos_records),
-                'scopus_count': len(tool.scopus_records),
-                'duplicates': len(tool.find_wos_scopus_duplicates()),
-                'final_count': len(tool.wos_records) + len(tool.scopus_records) - len(tool.find_wos_scopus_duplicates())
+                'wos_count': tool.stats['wos_count'],
+                'scopus_count': tool.stats['scopus_count'],
+                'duplicates': tool.stats['scopus_duplicates'],
+                'final_count': tool.stats['final_count']
             }
 
             logger.info(f"✓ 合并去重完成: {self.merged_file}")
@@ -612,7 +622,8 @@ class AIWorkflow:
                     report.append(f"  筛选统计:")
                     report.append(f"    - 输入记录: {stats['total_records']}")
                     report.append(f"    - 筛选后: {stats['filtered_records']}")
-                    report.append(f"    - 筛选率: {stats['filtered_records']/stats['total_records']*100:.1f}%")
+                    filter_rate = (stats['filtered_records'] / stats['total_records'] * 100) if stats['total_records'] else 0.0
+                    report.append(f"    - 筛选率: {filter_rate:.1f}%")
 
                 if 'cleaning_stats' in step_info:
                     stats = step_info['cleaning_stats']
@@ -621,7 +632,8 @@ class AIWorkflow:
                     report.append(f"    - 总机构数（清洗后）: {stats['institutions_after']}")
                     report.append(f"    - 唯一机构数（清洗前）: {stats['unique_before']}")
                     report.append(f"    - 唯一机构数（清洗后）: {stats['unique_after']}")
-                    report.append(f"    - 减少比例: {(1-stats['unique_after']/stats['unique_before'])*100:.1f}%")
+                    reduction_rate = ((1 - stats['unique_after'] / stats['unique_before']) * 100) if stats['unique_before'] else 0.0
+                    report.append(f"    - 减少比例: {reduction_rate:.1f}%")
                     report.append(f"    - 移除噪音: {stats['removed_noise']}")
                     report.append(f"    - 合并父子机构: {stats['merged']}")
                     report.append(f"    - 移除独立部门: {stats['removed_departments']}")
@@ -710,7 +722,8 @@ class AIWorkflow:
             # 创建主文件夹
             folders = {
                 'Figures and Tables': [
-                    '01 文档类型'
+                    '01 文档类型',
+                    '02 各年发文及引文量',
                 ],
                 'data': [],
                 'project': []
@@ -740,7 +753,8 @@ class AIWorkflow:
         logger.info("步骤10: 生成所有图表")
         logger.info("=" * 80)
 
-        if not PLOT_AVAILABLE:
+        generate_all_figures = load_generate_all_figures()
+        if generate_all_figures is None:
             logger.warning("⚠ 图表生成功能不可用（缺少依赖）")
             return True
 
@@ -756,7 +770,12 @@ class AIWorkflow:
                     max_year = int(match.group(2))
 
             # 传递数据目录和年份参数，生成所有图表
-            success = generate_all_figures(str(self.data_dir), min_year, max_year)
+            success = generate_all_figures(
+                str(self.data_dir),
+                min_year,
+                max_year,
+                final_file=str(self.cleaned_file if self.enable_cleaning else self.filtered_file),
+            )
             if success:
                 logger.info("✓ 所有图表生成完成")
                 logger.info("")
@@ -874,63 +893,57 @@ class AIWorkflow:
 def main():
     """命令行工具"""
     parser = argparse.ArgumentParser(
-        description='AI增强的一键式工作流',
+        description='文献计量数据整合工作流',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 基本使用（启用AI补全）
+  # 基本使用
   python3 run_ai_workflow.py --data-dir "/path/to/data"
 
   # 筛选中文文献
   python3 run_ai_workflow.py --data-dir "/path/to/data" --language Chinese
 
-  # 禁用AI补全（仅格式转换和合并）
+  # 禁用所有 AI 步骤（跳过 WOS 风格标准化与机构补全）
   python3 run_ai_workflow.py --data-dir "/path/to/data" --no-ai
 
   # 禁用机构清洗
   python3 run_ai_workflow.py --data-dir "/path/to/data" --no-cleaning
 
-  # 过滤指定年份范围（如2015-2024）⭐ NEW
+  # 过滤指定年份范围（如 2015-2024）
   python3 run_ai_workflow.py --data-dir "/path/to/data" --year-range 2015-2024
 
   # 使用自定义清洗规则
   python3 run_ai_workflow.py --data-dir "/path/to/data" --cleaning-config config/my_rules.json
 
   # 完整示例
-  python3 run_ai_workflow.py \\
-      --data-dir "/path/to/data/My_Research_Project" \\
-      --language English \\
+  python3 run_ai_workflow.py \
+      --data-dir "/path/to/data/My_Research_Project" \
+      --language English \
       --log-level INFO
 
 输入要求:
   数据目录必须包含:
-  - wos.txt (WOS原始数据)
-  - scopus.csv (Scopus导出数据)
+  - wos.txt
+  - scopus.csv
 
-输出文件:
-  - scopus_converted_to_wos.txt (转换后的Scopus数据，已WOS标准化)
-  - scopus_enriched.txt (AI补全后的数据，如果启用AI)
-  - merged_deduplicated.txt (合并去重后的数据)
-  - english_only.txt (语言筛选后的数据)
-  - english_analysis_report.txt (统计分析报告)
-  - ai_workflow_report.txt (工作流完成报告)
-
-WOS标准化功能 (v4.0.1批量并发版):
-  - 国家名WOS标准化（China → Peoples R China）- 60个国家
-  - 期刊名WOS标准缩写（Journal of XXX → J XXX）- 237个期刊
-  - 作者名使用原有算法（不用AI，准确率97%+）
-  - 批量并发处理（20线程，3分钟完成660篇）
-  - 数据库记忆，越用越快（297次API调用 vs 7000+）
+常见输出文件:
+  - scopus_converted_to_wos.txt
+  - scopus_enriched.txt（启用 AI 时）
+  - merged_deduplicated.txt
+  - english_only.txt 或其他语言筛选结果
+  - Final_Version.txt（启用机构清洗时）
+  - *_analysis_report.txt
+  - ai_workflow_report.txt
         """
     )
 
     parser.add_argument('--data-dir', required=True, help='数据目录（包含wos.txt和scopus.csv）')
     parser.add_argument('--language', default='English', help='目标语言（默认: English）')
-    parser.add_argument('--no-ai', action='store_true', help='禁用AI补全')
+    parser.add_argument('--no-ai', action='store_true', help='禁用所有AI步骤（WOS标准化 + 机构补全）')
     parser.add_argument('--no-cleaning', action='store_true', help='禁用机构清洗（默认启用）')
     parser.add_argument('--cleaning-config', default='config/institution_cleaning_rules_ultimate.json',
                        help='机构清洗规则配置文件（默认: 终极版规则）')
-    parser.add_argument('--year-range', help='年份范围过滤（格式: YYYY-YYYY，如2015-2024）⭐ NEW')
+    parser.add_argument('--year-range', help='年份范围过滤（格式: YYYY-YYYY，如2015-2024）')
     parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
                        default='INFO', help='日志级别')
 

@@ -10,7 +10,7 @@
 
 在GitHub推送过程中，发现以下敏感信息被硬编码在源代码中：
 
-- **API密钥**: `sk-leomeng1997`
+- **API密钥**: `<redacted-revoked-key>`
 - **API URL**: `https://gptload.drmeng.top/proxy/bibliometrics/v1beta`
 
 ### 受影响的文件（13个）
@@ -40,7 +40,7 @@
 
 **立即前往API提供商网站撤销密钥**：
 - 登录 `https://gptload.drmeng.top` 或API管理后台
-- 找到密钥 `sk-leomeng1997`
+- 找到密钥 `<redacted-revoked-key>`
 - **立即撤销/删除此密钥**
 - 生成新的API密钥
 
@@ -59,7 +59,7 @@
 brew install bfg
 
 # 2. 创建密钥文件
-echo "sk-leomeng1997" > secrets.txt
+echo "<redacted-revoked-key>" > secrets.txt
 
 # 3. 清理所有历史
 bfg --replace-text secrets.txt --no-blob-protection MultiDatabase
@@ -127,7 +127,7 @@ GEMINI_MODEL=gemini-2.5-flash
 ```python
 # 修改前：
 config = GeminiConfig.from_params(
-    api_key='sk-leomeng1997',  # ❌ 硬编码
+    api_key='<redacted-revoked-key>',  # ❌ 硬编码
     api_url='https://gptload.drmeng.top/proxy/bibliometrics/v1beta',
     model='gemini-2.5-flash-lite'
 )
@@ -183,7 +183,7 @@ git push origin main
 
 ## 📋 完整检查清单
 
-- [ ] **撤销旧的API密钥** `sk-leomeng1997` ⭐ 最优先
+- [ ] **撤销旧的API密钥** `<redacted-revoked-key>` ⭐ 最优先
 - [ ] **生成新的API密钥**
 - [ ] **从Git历史中删除敏感信息** (使用BFG或filter-branch)
 - [ ] **Force push清理后的历史到GitHub**

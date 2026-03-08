@@ -11,13 +11,13 @@
 
 **前往API提供商网站撤销密钥**：
 ```
-密钥: sk-leomeng1997
+密钥: <redacted-revoked-key>
 URL: https://gptload.drmeng.top
 ```
 
 1. 登录API管理后台
 2. 找到密钥列表
-3. **删除/撤销** `sk-leomeng1997`
+3. **删除/撤销** `<redacted-revoked-key>`
 4. **生成新密钥**（保存好，稍后使用）
 
 > ⚠️ 为什么要先做这个？因为密钥已在GitHub公开，任何人都可能复制使用！
@@ -125,7 +125,7 @@ git push origin main --force
 
 ## ✅ 完成检查清单
 
-- [ ] ⭐ **撤销旧API密钥** `sk-leomeng1997`
+- [ ] ⭐ **撤销旧API密钥** `<redacted-revoked-key>`
 - [ ] **生成新API密钥**
 - [ ] **运行** `remove_hardcoded_keys.py`
 - [ ] **创建** `.env` 文件

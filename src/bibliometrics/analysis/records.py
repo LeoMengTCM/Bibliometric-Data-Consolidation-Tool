@@ -22,6 +22,8 @@ import logging
 from collections import Counter, defaultdict
 from typing import Dict, List, Tuple
 
+from ..utils.paths import resolve_project_path
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -34,11 +36,15 @@ class RecordAnalyzer:
 
     def __init__(self, wos_file: str, config_dir: str = "config"):
         self.wos_file = wos_file
-        self.config_dir = config_dir
+        self.config_dir = str(resolve_project_path(config_dir))
         self.records = []
 
-        # 加载国家映射
-        self.country_mapping = self._load_country_mapping()
+        self.use_human_readable_countries = os.environ.get(
+            'BIBLIOMETRICS_ANALYSIS_HUMAN_COUNTRY_NAMES', ''
+        ).strip().lower() in {'1', 'true', 'yes'}
+
+        # 仅在显式要求人类可读名称时加载映射；默认保留 WOS 风格国家名
+        self.country_mapping = self._load_country_mapping() if self.use_human_readable_countries else {}
 
         # 统计数据
         self.stats = {
@@ -68,11 +74,21 @@ class RecordAnalyzer:
 
     def normalize_country(self, country: str) -> str:
         """标准化国家名称"""
-        country = country.strip().rstrip('.')
+        country = re.sub(r'\s+', ' ', country.strip().rstrip('.'))
 
-        # 处理美国州+邮编格式: "TX 77030 USA" -> "United States"
-        if re.match(r'^[A-Z]{2}\s+\d{5}\s+USA$', country):
-            return "United States"
+        # 处理州/邮编前缀混入国家字段的情况，例如:
+        # - CA 94115 USA
+        # - 100191 Peoples R China
+        prefixed_match = re.match(r'^(?:[A-Z]{2}\s+)?\d{4,6}(?:-\d{4})?\s+(.+)$', country)
+        if prefixed_match and not re.search(r'\d', prefixed_match.group(1)):
+            country = prefixed_match.group(1).strip()
+
+        # 处理美国州/邮编+USA格式，默认仍保持 WOS 风格的 USA
+        if re.match(r'^(?:[A-Z]{2}(?:\s+\d{5})?|\d{5})\s+USA$', country):
+            return 'United States' if self.use_human_readable_countries else 'USA'
+
+        if not self.use_human_readable_countries:
+            return country
 
         # 查找映射表
         if country in self.country_mapping:
@@ -182,6 +198,7 @@ class RecordAnalyzer:
                     for i, c1 in enumerate(unique_countries):
                         for c2 in unique_countries[i+1:]:
                             self.stats['country_collaborations'][c1].add(c2)
+                            self.stats['country_collaborations'][c2].add(c1)
 
             # 机构分布
             if 'C3' in record:
